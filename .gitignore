@@ -33,3 +33,9 @@ hw2/Debug
 hw2/*.db
 hw2/hw2console/Debug/
 hw2/libhw2/Debug/
+hw2/hw2console/x64/Debug/
+hw2/hw2py/Debug/
+hw2/hw2py/x64/Debug/
+*.log
+
+hw2/libhw2/x64/Debug/
