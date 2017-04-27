@@ -39,3 +39,7 @@ hw2/hw2py/x64/Debug/
 *.log
 
 hw2/libhw2/x64/Debug/
+
+project/jpeg_comp_cpu/jpeg_comp_cpu\.VC\.db
+
+project/jpeg_comp_cpu/jpeg_comp_cpu\.VC\.VC\.opendb
