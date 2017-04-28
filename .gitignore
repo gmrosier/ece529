@@ -47,3 +47,7 @@ project/jpeg_comp_cpu/jpeg_comp_cpu\.VC\.VC\.opendb
 
 project/jpeg_comp_cpu/Debug/
 *.bak
+
+project/jpeg_comp_cpu/\.vscode/
+
+project/jpeg_comp_cpu/jpeg_encoder

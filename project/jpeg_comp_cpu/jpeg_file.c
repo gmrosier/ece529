@@ -1,4 +1,4 @@
-#include "jpef_file.h"
+#include "jpeg_file.h"
 #include <stdlib.h>
 
 #define MSB(X) ((X >> 8) & 0xFF)
@@ -134,7 +134,7 @@ FILE * open_stream(const char * file_name, unsigned int height, unsigned int wid
     unsigned char data[2];
 
     // Open File
-    fopen_s(&fid, file_name, "wb");
+    fid = fopen(file_name, "wb");
     if (fid == NULL)
     {
         printf("Failed To Open File");
@@ -236,7 +236,7 @@ void file_read(const char * file_name, unsigned char * image, unsigned int width
     unsigned int xblocks = width / 8;
 
     // Open File
-    fopen_s(&fid, file_name, "rb");
+    fid = fopen(file_name, "rb");
     if (fid == NULL)
     {
         printf("Failed to Open File: %s\n", file_name);

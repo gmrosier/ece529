@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "jpef_file.h"
+#include "jpeg_file.h"
 #include "encoder.h"
 
 int main(int argc, char * argv[])
