@@ -15,6 +15,9 @@ int main(int argc, char * argv[])
     // Read File
     file_read("lena_gray.raw", image, 512, 512);
 
+    // Init Q Table
+    init_qtable(50.0f);
+
     // Write Out JPEG
     fid = open_stream("lena_gray.jpg", 512, 512);
     if (fid != NULL)

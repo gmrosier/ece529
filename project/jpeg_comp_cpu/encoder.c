@@ -3,21 +3,53 @@
 
 #include <math.h>
 
+#ifndef max
+#define max(a, b) ((a > b) ? a : b)
+#endif
+
+#ifndef min
+#define min(a, b) ((a <= b) ? a : b)
+#endif
+
+//const unsigned char vQTable[8 * 8] =
+//{
+//    16, 11, 10, 16,  24,  40,  51,  61,
+//    12, 11, 14, 19,  26,  58,  60,  55,
+//    14, 13, 16, 24,  40,  57,  69,  56,
+//    14, 17, 22, 29,  41,  87,  80,  62,
+//    18, 22, 37, 56,  68, 109, 103,  77,
+//    24, 35, 55, 64,  81, 104, 113,  92,
+//    49, 64, 78, 87, 103, 121, 120, 101,
+//    72, 92, 95, 98, 112, 100, 103,  99
+//};
+
 const unsigned char vQTable[8 * 8] =
 {
     16, 11, 10, 16,  24,  40,  51,  61,
-    12, 11, 14, 19,  26,  58,  60,  55,
+    12, 12, 14, 19,  26,  58,  60,  55,
     14, 13, 16, 24,  40,  57,  69,  56,
-    14, 17, 22, 29,  41,  87,  80,  62,
+    14, 17, 22, 29,  51,  87,  80,  62,
     18, 22, 37, 56,  68, 109, 103,  77,
     24, 35, 55, 64,  81, 104, 113,  92,
     49, 64, 78, 87, 103, 121, 120, 101,
     72, 92, 95, 98, 112, 100, 103,  99
 };
 
+unsigned char qTable[8 * 8];
+
+void init_qtable(float quality_factor)
+{
+    for (int i = 0; i < 64; i++)
+    {
+        unsigned int value = ((unsigned int)(vQTable[i] * (quality_factor + 50.0f))) / 100;
+        value = max(1, min(255, value));
+        qTable[i] = (unsigned char)value;
+    }   
+}
+
 const unsigned char * get_qtable()
 {
-    return vQTable;
+    return qTable;
 }
 
 const float angle[7] = {
@@ -45,11 +77,16 @@ const unsigned char readPattern[8 * 8] =
     35, 36, 48, 49, 57, 58, 62, 63
 };
 
+const unsigned char * get_read_pattern()
+{
+    return readPattern;
+}
+
 typedef struct
 {
-    int zero_cnt;
-    int num_bits;
-    int value;
+    unsigned short zero_cnt;
+    unsigned short num_bits;
+    short value;
 } rle_info;
 
 
@@ -95,7 +132,7 @@ void load_huffman_table(const unsigned char * codes_per_len, const unsigned char
 
 const unsigned char * get_code_lens(unsigned char isDC)
 {
-    if (isDC = 1)
+    if (isDC == 1)
         return dc_codes_per_len;
 
     return ac_codes_per_len;
@@ -113,7 +150,7 @@ const unsigned int get_code_count(unsigned char isDC)
 {
     if (isDC == 1)
         return 12;
-    
+
     return 162;
 }
 
@@ -123,108 +160,107 @@ const unsigned int get_code_count(unsigned char isDC)
 // can be accomplished by a right shift.
 void dct1d(float * input, float * output)
 {
-   // Sum Terms
-   float s07 = input[0] + input[7];
-   float s12 = input[1] + input[2];
-   float s34 = input[3] + input[4];
-   float s56 = input[5] + input[6];
-   
-   // Difference Terms
-   float d07 = input[0] - input[7];
-   float d12 = input[1] - input[2];
-   float d34 = input[3] - input[4];
-   float d56 = input[5] - input[6];
-   
-   // Combined Terms
-   float ss07s34 = s07 + s34;
-   float ss12s56 = s12 + s56;
-   float sd12d56 = d12 + d56;
-   float dd12d56 = d12 - d56;
-   float ds07s34 = s07 - s34;
-   float ds12s56 = s12 - s56;
+    // Sum Terms
+    float s07 = input[0] + input[7];
+    float s12 = input[1] + input[2];
+    float s34 = input[3] + input[4];
+    float s56 = input[5] + input[6];
 
-   // Combine More Terms w/ Multiply
-   float C4mds12s56 = C(4) * ds12s56;
-   float C4msd12d56 = C(4) * sd12d56;
-   
-   //output
-   // S0 =  C4 * ((s07 + s34) + (s12 + s56))
-   output[0] = (C(4) * (ss07s34 + ss12s56)) / 2.0f;
+    // Difference Terms
+    float d07 = input[0] - input[7];
+    float d12 = input[1] - input[2];
+    float d34 = input[3] - input[4];
+    float d56 = input[5] - input[6];
 
-   // S1 =  C1 * (d07 + C4mds12s56) - S1 * (-d34 - C4msd12d56)
-   output[1] = (C(1) * (d07 + C4mds12s56) - S(1) * (-d34 - C4msd12d56)) / 2.0f;
+    // Combined Terms
+    float ss07s34 = s07 + s34;
+    float ss12s56 = s12 + s56;
+    float sd12d56 = d12 + d56;
+    float dd12d56 = d12 - d56;
+    float ds07s34 = s07 - s34;
+    float ds12s56 = s12 - s56;
 
-   // S2 =  C6 * (dd12d56) + S6 * (ds07s34)
-   output[2] = (C(6) * dd12d56 + S(6) * ds07s34) / 2.0f;
+    // Combine More Terms w/ Multiply
+    float C4mds12s56 = C(4) * ds12s56;
+    float C4msd12d56 = C(4) * sd12d56;
 
-   // S3 =  C3 * (d07 - C4 * (ds12s56)) - S3 * (d34 - C4 * (d12 + d56))
-   output[3] = (C(3) * (d07 - C4mds12s56) - S(3) * (d34 - C4msd12d56)) / 2.0f;
+    //output
+    // S0 =  C4 * ((s07 + s34) + (s12 + s56))
+    output[0] = (C(4) * (ss07s34 + ss12s56)) / 2.0f;
 
-   // S4 =  C4 * ((s07 + s34) - (s12 + s56))
-   output[4] = (C(4) * (ss07s34 - ss12s56)) / 2.0f;
+    // S1 =  C1 * (d07 + C4mds12s56) - S1 * (-d34 - C4msd12d56)
+    output[1] = (C(1) * (d07 + C4mds12s56) - S(1) * (-d34 - C4msd12d56)) / 2.0f;
 
-   // S5 =  S3 * (d07 - C4 * (s12 - s56)) + C3 * (d34 - C4 * (d12 + d56))
-   output[5] = (S(3) * (d07 - C4mds12s56) + C(3) * (d34 - C4msd12d56)) / 2.0f;
+    // S2 =  C6 * (dd12d56) + S6 * (ds07s34)
+    output[2] = (C(6) * dd12d56 + S(6) * ds07s34) / 2.0f;
 
-   // S6 = -S6 * (d12 - d56) + C6 * (s07 - s34)
-   output[6] = (-S(6) * dd12d56 + C(6) * ds07s34) / 2.0f;
+    // S3 =  C3 * (d07 - C4 * (ds12s56)) - S3 * (d34 - C4 * (d12 + d56))
+    output[3] = (C(3) * (d07 - C4mds12s56) - S(3) * (d34 - C4msd12d56)) / 2.0f;
 
-   // S7 =  S1 * (d07 + C4 * (s12 - s56)) + C1 * (-d34 - C4 * (d12 + d56))
-   output[7] = (S(1) * (d07 + C4mds12s56) + C(1) * (-d34 - C4msd12d56)) / 2.0f;
+    // S4 =  C4 * ((s07 + s34) - (s12 + s56))
+    output[4] = (C(4) * (ss07s34 - ss12s56)) / 2.0f;
+
+    // S5 =  S3 * (d07 - C4 * (s12 - s56)) + C3 * (d34 - C4 * (d12 + d56))
+    output[5] = (S(3) * (d07 - C4mds12s56) + C(3) * (d34 - C4msd12d56)) / 2.0f;
+
+    // S6 = -S6 * (d12 - d56) + C6 * (s07 - s34)
+    output[6] = (-S(6) * dd12d56 + C(6) * ds07s34) / 2.0f;
+
+    // S7 =  S1 * (d07 + C4 * (s12 - s56)) + C1 * (-d34 - C4 * (d12 + d56))
+    output[7] = (S(1) * (d07 + C4mds12s56) + C(1) * (-d34 - C4msd12d56)) / 2.0f;
 }
 
 void transpose(float * input, float * output)
 {
-   for (int r = 0; r < 8; r++)
-   {
-      for (int c = 0; c < 8; c++)
-      {
-         output[c * 8 + r] = input[r * 8 + c];
-      }
-   }
+    for (int r = 0; r < 8; r++)
+    {
+        for (int c = 0; c < 8; c++)
+        {
+            output[c * 8 + r] = input[r * 8 + c];
+        }
+    }
 }
 
 void dct2d(float * input, float * output)
 {
-   float tmp[8 * 8];
-   
-   // Transpose
-   transpose(input, tmp);
-   
-   // 1D-DCT
-   for (int i = 0; i < 8; i++)
-   {
-      dct1d(&tmp[i * 8], &output[i * 8]);
-   }
+    float tmp[8 * 8];
 
-   // Transpose
-   transpose(output, tmp);
+    // Transpose
+    transpose(input, tmp);
 
-   // 1D-DCT
-   for (int i = 0; i < 8; i++)
-   {
-      dct1d(&tmp[i * 8], &output[i * 8]);
-   }
+    // 1D-DCT
+    for (int i = 0; i < 8; i++)
+    {
+        dct1d(&tmp[i * 8], &output[i * 8]);
+    }
+
+    // Transpose
+    transpose(output, tmp);
+
+    // 1D-DCT
+    for (int i = 0; i < 8; i++)
+    {
+        dct1d(&tmp[i * 8], &output[i * 8]);
+    }
 }
 
 void zero_shift(unsigned char * input, float * output)
 {
-   for (int i = 0; i < 8 * 8; i++)
-   {
-      output[i] = (float)(input[i]) - 127.0f;
-   }
+    for (int i = 0; i < 8 * 8; i++)
+    {
+        output[i] = (float)(input[i]) - 127.0f;
+    }
 }
 
-void quantization(float * input, const unsigned char * qTable, unsigned char * output)
+void quantization(float * input, const unsigned char * qTable, short * output)
 {
-   for (int i = 0; i < 8 * 8; i++)
-   {
-      output[i] = (unsigned char)(roundf((input[i] + (float)(qTable[i] >> 1))
-         / (float)(qTable[i])));
-   }
+    for (int i = 0; i < 8 * 8; i++)
+    {
+        output[i] = (short)roundf(input[i] / (float)qTable[i]);
+    }
 }
 
-void zigzag(unsigned char * input, unsigned char * output)
+void zigzag(const short * input, short * output)
 {
     for (int i = 0; i < 8 * 8; i++)
     {
@@ -240,7 +276,7 @@ int num_bits(int value)
 
     // Take Absolute Value
     value = abs(value);
-    
+
     // Find Min Number of Bits Need to Store This Number
     for (int i = 1; i < 8; i++)
     {
@@ -251,7 +287,7 @@ int num_bits(int value)
     return 8;
 }
 
-void zero_rle(unsigned char * input, rle_info * output, unsigned int * length, unsigned char * prev_dc)
+void zero_rle(short * input, rle_info * output, unsigned int * length, short * prev_dc)
 {
     // Get Diff
     int diff = input[0] - *prev_dc;
@@ -307,7 +343,7 @@ void zero_rle(unsigned char * input, rle_info * output, unsigned int * length, u
     output[idx].value = 0;
 
     // Return RLE Length
-    *length = idx;
+    *length = idx+1;
 }
 
 void encode(rle_info * rle, unsigned int rle_length, huff_info * table, FILE * fid)
@@ -338,15 +374,15 @@ void encode(rle_info * rle, unsigned int rle_length, huff_info * table, FILE * f
     }
 }
 
-void compress_8x8(unsigned char * block, unsigned char * prev_dc, FILE * fid)
+void compress_8x8(unsigned char * block, short * prev_dc, FILE * fid)
 {
     float tmp[8 * 8];
     float input[8 * 8];
-    unsigned char q[8 * 8];
-    unsigned char zz[8 * 8];
+    short q[8 * 8];
+    short zz[8 * 8];
     rle_info rle[64];
     unsigned int rle_length;
-    
+
     // Zero-Shift
     zero_shift(block, input);
 
@@ -354,7 +390,7 @@ void compress_8x8(unsigned char * block, unsigned char * prev_dc, FILE * fid)
     dct2d(input, tmp);
 
     // Quantization 
-    quantization(tmp, vQTable, q);
+    quantization(tmp, qTable, q);
 
     // Reorder Values
     zigzag(q, zz);
@@ -364,10 +400,9 @@ void compress_8x8(unsigned char * block, unsigned char * prev_dc, FILE * fid)
 
     // DC Huffman Encoding
     encode(rle, 1, dc_table, fid);
-    
+
     // AC Huffman Encoding
     encode(&rle[1], rle_length - 1, ac_table, fid);
-
 }
 
 void compress_img(unsigned char * img, unsigned int width, unsigned int height, FILE * fid)
@@ -377,10 +412,10 @@ void compress_img(unsigned char * img, unsigned int width, unsigned int height, 
     load_huffman_table(ac_codes_per_len, ac_values, ac_table);
 
     // Calculate Bounds
-    unsigned int blocks = (width * height) / 8;
-    
+    unsigned int blocks = (width * height) / (8 * 8);
+
     // Break Into Blocks
-    unsigned char prev_dc = 0;
+    short prev_dc = 0;
     for (unsigned int i = 0; i < blocks; i++)
     {
         compress_8x8(&img[i*(8 * 8)], &prev_dc, fid);

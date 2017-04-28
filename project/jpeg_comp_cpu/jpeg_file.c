@@ -1,139 +1,135 @@
 #include "jpef_file.h"
 #include <stdlib.h>
 
+#define MSB(X) ((X >> 8) & 0xFF)
+#define LSB(X) (X & 0xFF)
+
 void write_quantization(FILE * fid)
 {
-    unsigned short sdata;
-    unsigned char * cdata = (unsigned char *)&sdata;
-    const unsigned char * qtable;
+    unsigned char data[5];
+    unsigned char qtable[64];
+    const unsigned char * read_ptrn = get_read_pattern();
+    const unsigned char * q = get_qtable();
 
-    // Write QTable Marker
-    sdata = 0xFFDB;
-    fwrite(&sdata, 2, 1, fid);
-
-    // Header Length
-    sdata = 67;
-    fwrite(&sdata, 2, 1, fid);
-
+    // Set QTable Marker
+    data[0] = 0xFF;
+    data[1] = 0xDB;
+    
+    // Set Header Length
+    data[2] = 0;
+    data[3] = 67;
+    
     // Table Info
-    cdata[0] = 0;
-    fwrite(cdata, 1, 1, fid);
+    data[4] = 0;
+    fwrite(data, 1, 5, fid);
 
     // Write Table
-    qtable = get_qtable();
-    fwrite(qtable, 1, 65, fid);
+    for (int i = 0; i < 64; i++)
+    {
+        qtable[read_ptrn[i]] = q[i];
+    }
+    fwrite(qtable, 1, 64, fid);
 }
 
 void write_start_of_frame(FILE * fid)
 {
-    unsigned short sdata;
-    unsigned char * cdata = (unsigned char *)&sdata;
+    unsigned char data[13];
 
-    // Write Start of Frame Marker
-    sdata = 0xFFC0;
-    fwrite(&sdata, 2, 1, fid);
+    // Start of Frame Marker
+    data[0] = 0xFF;
+    data[1] = 0xC0;
+    
+    // Header Length
+    data[2] = 0;
+    data[3] = 11;
+    
+    // Sample Precision
+    data[4] = 8;
+    
+    // Number of Lines
+    data[5] = MSB(512);
+    data[6] = LSB(512);
+    
+    // Samples Per Line
+    data[7] = MSB(512);
+    data[8] = LSB(512);
+    
+    // Components in Frame
+    data[9] = 1;
+    
+    // Component Id
+    data[10] = 1;
+    
+    // Component Samping
+    data[11] = 0x11;
+    
+    // QTable ID
+    data[12] = 0;
 
-    // Write Header Length
-    sdata = 11;
-    fwrite(&sdata, 2, 1, fid);
-
-    // Write Sample Precision
-    cdata[0] = 8;
-    fwrite(cdata, 1, 1, fid);
-
-    // Write Number of Lines
-    sdata = 512;
-    fwrite(&sdata, 2, 1, fid);
-
-    // Write Samples Per Line
-    sdata = 512;
-    fwrite(&sdata, 2, 1, fid);
-
-    // Write Components in Frame
-    cdata[0] = 1;
-    fwrite(cdata, 1, 1, fid);
-
-    // Write Component Id
-    cdata[0] = 1;
-    fwrite(cdata, 1, 1, fid);
-
-    // Write Component Samping
-    cdata[0] = 0x11;
-    fwrite(cdata, 1, 1, fid);
-
-    // Write QTable ID
-    cdata[0] = 0;
-    fwrite(cdata, 1, 1, fid);
+    // Write Data
+    fwrite(data, 1, 13, fid);
 }
 
-void write_huffman(FILE * fid)
+void write_huffman(FILE * fid, unsigned char isDC)
 {
-    unsigned short sdata;
-    unsigned char * cdata = (unsigned char *)&sdata;
+    unsigned char data[5];
+    unsigned short len;
 
-    // Write Huffman Marker
-    sdata = 0xFFC4;
-    fwrite(&sdata, 2, 1, fid);
+    // Huffman Marker
+    data[0] = 0xFF;
+    data[1] = 0xC4;
+    
+    // Length
+    len = 19 + get_code_count(isDC);
+    data[2] = MSB(len);
+    data[3] = LSB(len);
+    
+    // Table Type
+    data[4] = (isDC == 1) ? 0 : 0x10;
+    fwrite(data, 1, 5, fid);
 
-    // Write Length
-    sdata = 6 + 34 + get_code_count(1) + get_code_count(0);
-    fwrite(&sdata, 2, 1, fid);
-
-    // Write DC Table
-    cdata[0] = 0;
-    fwrite(cdata, 1, 1, fid);
-    fwrite(get_code_lens(1), 1, 16, fid);
-    fwrite(get_code_values(1), 1, get_code_count(1), fid);
-
-    // Write AC Table
-    cdata[0] = 0x10;
-    fwrite(cdata, 1, 1, fid);
-    fwrite(get_code_lens(0), 1, 16, fid);
-    fwrite(get_code_values(0), 1, get_code_count(0), fid);
+    // Table
+    fwrite(get_code_lens(isDC), 1, 16, fid);
+    fwrite(get_code_values(isDC), 1, get_code_count(isDC), fid);
 }
 
 void write_scan_header(FILE * fid)
 {
-    unsigned short sdata;
-    unsigned char * cdata = (unsigned char *)&sdata;
+    unsigned char data[10];
 
-    // Write Scan Header Marker
-    sdata = 0xFFDA;
-    fwrite(&sdata, 2, 1, fid);
-
-    // Write Header Length
-    sdata = 8;
-    fwrite(&sdata, 2, 1, fid);
-
-    // Write Number of Compoents in Scan
-    cdata[0] = 1;
-    fwrite(cdata, 1, 1, fid);
-
-    // Write Component 1 Selector
-    cdata[0] = 1;
-    fwrite(cdata, 1, 1, fid);
-
-    // Write Component 1 Selector
-    cdata[0] = 0;
-    fwrite(cdata, 1, 1, fid);
-
-    // Write Start of Spectral Selection
-    cdata[0] = 0;
-    fwrite(cdata, 1, 1, fid);
-
-    // Write End of Spectral Selection
-    cdata[0] = 63;
-    fwrite(cdata, 1, 1, fid);
-
-    // Write Approximation Bit Positions
-    cdata[0] = 0;
-    fwrite(cdata, 1, 1, fid);
+    // Scan Header Marker
+    data[0] = 0xFF;
+    data[1] = 0xDA;
+    
+    // Header Length
+    data[2] = 0;
+    data[3] = 8;
+    
+    // Number of Compoents in Scan
+    data[4] = 1;
+    
+    // Component 1 Selector
+    data[5] = 1;
+    
+    // Component 1 Selector
+    data[6] = 0;
+    
+    // Start of Spectral Selection
+    data[7] = 0;
+    
+    // End of Spectral Selection
+    data[8] = 63;
+    
+    // Approximation Bit Positions
+    data[9] = 0;
+    fwrite(data, 1, 10, fid);
 }
 
 FILE * open_stream(const char * file_name, unsigned int height, unsigned int width)
 {
     FILE * fid;
-    
+    unsigned char data[2];
+
     // Open File
     fopen_s(&fid, file_name, "wb");
     if (fid == NULL)
@@ -143,8 +139,9 @@ FILE * open_stream(const char * file_name, unsigned int height, unsigned int wid
     }
 
     // Write Start Of Image Marker
-    unsigned short sdata = 0xFFD8;
-    fwrite(&sdata, 2, 1, fid);
+    data[0] = 0xFF;
+    data[1] = 0xD8;
+    fwrite(&data, 1, 2, fid);
     
     // Write Quantization Table
     write_quantization(fid);
@@ -152,8 +149,11 @@ FILE * open_stream(const char * file_name, unsigned int height, unsigned int wid
     // Write Start Of Frame
     write_start_of_frame(fid);
 
-    // Write Huffman Table
-    write_huffman(fid);
+    // Write DC Huffman Table
+    write_huffman(fid, 1);
+
+    // Write AC Huffman Table
+    write_huffman(fid, 0);
 
     // Write Scan Header
     write_scan_header(fid);
@@ -164,11 +164,12 @@ FILE * open_stream(const char * file_name, unsigned int height, unsigned int wid
 
 void close_stream(FILE * fid)
 {
-    unsigned short sdata;
+    unsigned char data[2];
 
     // Write End Of Image
-    sdata = 0xFFD9;
-    fwrite(&sdata, 2, 1, fid);
+    data[0] = 0xFF;
+    data[1] = 0xD9;
+    fwrite(data, 1, 2, fid);
 
     // Close File
     fclose(fid);
