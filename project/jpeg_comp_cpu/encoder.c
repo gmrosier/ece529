@@ -355,7 +355,7 @@ void encode(rle_info * rle, unsigned int rle_length, huff_info * table, FILE * f
         int num_bits = rle[i].num_bits;
 
         // Get Code From Number of Bits
-        unsigned short additional = rle[i].value;
+        short additional = rle[i].value;
         if (additional < 0)
         {
             additional += (1 << num_bits) - 1;
