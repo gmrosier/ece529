@@ -1,6 +1,7 @@
 #include "encoder.h"
 #include "jpeg_file.h"
 
+#include <stdlib.h>
 #include <math.h>
 
 #ifndef max
