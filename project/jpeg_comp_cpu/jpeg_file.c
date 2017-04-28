@@ -4,6 +4,9 @@
 #define MSB(X) ((X >> 8) & 0xFF)
 #define LSB(X) (X & 0xFF)
 
+static unsigned char current_byte = 0;
+static unsigned char current_bit_cnt = 0;
+
 void write_quantization(FILE * fid)
 {
     unsigned char data[5];
@@ -166,6 +169,12 @@ void close_stream(FILE * fid)
 {
     unsigned char data[2];
 
+    // Check for Data in Buffer
+    if (current_bit_cnt > 0)
+    {
+        fwrite(&current_byte, 1, 1, fid);
+    }
+
     // Write End Of Image
     data[0] = 0xFF;
     data[1] = 0xD9;
@@ -174,10 +183,6 @@ void close_stream(FILE * fid)
     // Close File
     fclose(fid);
 }
-
-
-static unsigned char current_byte = 0;
-static unsigned char current_bit_cnt = 0;
 
 void write_stream(FILE * fid, const encode_info * item)
 {
@@ -210,6 +215,11 @@ void write_stream(FILE * fid, const encode_info * item)
         if (current_bit_cnt == 8)
         {
             fwrite(&current_byte, 1, 1, fid);
+            if (current_byte == 0xFF)
+            {
+                current_byte = 0;
+                fwrite(&current_byte, 1, 1, fid);
+            }
             fflush(fid);
             current_byte = 0;
             current_bit_cnt = 0;

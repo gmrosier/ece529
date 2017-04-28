@@ -1,4 +1,4 @@
-function [b, s, d, q, i] = dct_img( image, xblock, yblock, qtable, prevDC )
+function [b, s, d, q, iq, id, is, ib] = dct_img( image, xblock, yblock, qtable, prevDC )
     if (nargin < 5)
         prevDC = 0;
     end
@@ -11,6 +11,8 @@ function [b, s, d, q, i] = dct_img( image, xblock, yblock, qtable, prevDC )
     q = round(d ./ qtable);
     tmp = q;
     tmp(1,1) = tmp(1,1) - prevDC;
-    i = tmp .* qtable;
+    iq = tmp .* qtable;
+    id = idct2(iq);
+    is = uint8(id);
+    ib = is + 128;
 end
-

@@ -186,28 +186,36 @@ void dct1d(float * input, float * output)
 
     //output
     // S0 =  C4 * ((s07 + s34) + (s12 + s56))
-    output[0] = (C(4) * (ss07s34 + ss12s56)) / 2.0f;
+    //output[0] = (C(4) * (ss07s34 + ss12s56)) / 2.0f;
+    output[0] = (C(4) * (ss07s34 + ss12s56));
 
     // S1 =  C1 * (d07 + C4mds12s56) - S1 * (-d34 - C4msd12d56)
-    output[1] = (C(1) * (d07 + C4mds12s56) - S(1) * (-d34 - C4msd12d56)) / 2.0f;
+    //output[1] = (C(1) * (d07 + C4mds12s56) - S(1) * (-d34 - C4msd12d56)) / 2.0f;
+    output[1] = (C(1) * (d07 + C4mds12s56) - S(1) * (-d34 - C4msd12d56));
 
     // S2 =  C6 * (dd12d56) + S6 * (ds07s34)
-    output[2] = (C(6) * dd12d56 + S(6) * ds07s34) / 2.0f;
+    //output[2] = (C(6) * dd12d56 + S(6) * ds07s34) / 2.0f;
+    output[2] = (C(6) * dd12d56 + S(6) * ds07s34);
 
     // S3 =  C3 * (d07 - C4 * (ds12s56)) - S3 * (d34 - C4 * (d12 + d56))
-    output[3] = (C(3) * (d07 - C4mds12s56) - S(3) * (d34 - C4msd12d56)) / 2.0f;
+    //output[3] = (C(3) * (d07 - C4mds12s56) - S(3) * (d34 - C4msd12d56)) / 2.0f;
+    output[3] = (C(3) * (d07 - C4mds12s56) - S(3) * (d34 - C4msd12d56));
 
     // S4 =  C4 * ((s07 + s34) - (s12 + s56))
-    output[4] = (C(4) * (ss07s34 - ss12s56)) / 2.0f;
+    //output[4] = (C(4) * (ss07s34 - ss12s56)) / 2.0f;
+    output[4] = (C(4) * (ss07s34 - ss12s56));
 
     // S5 =  S3 * (d07 - C4 * (s12 - s56)) + C3 * (d34 - C4 * (d12 + d56))
-    output[5] = (S(3) * (d07 - C4mds12s56) + C(3) * (d34 - C4msd12d56)) / 2.0f;
+    //output[5] = (S(3) * (d07 - C4mds12s56) + C(3) * (d34 - C4msd12d56)) / 2.0f;
+    output[5] = (S(3) * (d07 - C4mds12s56) + C(3) * (d34 - C4msd12d56));
 
     // S6 = -S6 * (d12 - d56) + C6 * (s07 - s34)
-    output[6] = (-S(6) * dd12d56 + C(6) * ds07s34) / 2.0f;
+    //output[6] = (-S(6) * dd12d56 + C(6) * ds07s34) / 2.0f;
+    output[6] = (-S(6) * dd12d56 + C(6) * ds07s34);
 
     // S7 =  S1 * (d07 + C4 * (s12 - s56)) + C1 * (-d34 - C4 * (d12 + d56))
-    output[7] = (S(1) * (d07 + C4mds12s56) + C(1) * (-d34 - C4msd12d56)) / 2.0f;
+    //output[7] = (S(1) * (d07 + C4mds12s56) + C(1) * (-d34 - C4msd12d56)) / 2.0f;
+    output[7] = (S(1) * (d07 + C4mds12s56) + C(1) * (-d34 - C4msd12d56));
 }
 
 void transpose(float * input, float * output)
@@ -252,11 +260,14 @@ void zero_shift(unsigned char * input, float * output)
     }
 }
 
+
+// Divide the 2D-DCT by the specified quantization table
+// We also divide by 4 to take out the 2x scaling in the 1D-DCT
 void quantization(float * input, const unsigned char * qTable, short * output)
 {
     for (int i = 0; i < 8 * 8; i++)
     {
-        output[i] = (short)roundf(input[i] / (float)qTable[i]);
+        output[i] = ((short)roundf(input[i] / (float)qTable[i])) / 4;
     }
 }
 
