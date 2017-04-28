@@ -46,3 +46,4 @@ project/jpeg_comp_cpu/jpeg_comp_cpu\.VC\.VC\.opendb
 /project/jpeg_comp_cpu/lena_gray.jpg
 
 project/jpeg_comp_cpu/Debug/
+*.bak

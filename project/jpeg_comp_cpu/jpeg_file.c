@@ -191,7 +191,9 @@ void write_stream(FILE * fid, const encode_info * item)
         if (code_length > rem_len)
         {
             unsigned short mask = ((1 << rem_len) - 1);
-            unsigned short value = (code >> (code_length - rem_len)) & mask;
+            unsigned short len_diff = code_length - rem_len;
+            unsigned short value = (code >> len_diff) & mask;
+            code &= (1 << len_diff) - 1;
             current_byte += (unsigned char)value;
             current_bit_cnt = 8;
             code_length -= rem_len;
@@ -208,10 +210,11 @@ void write_stream(FILE * fid, const encode_info * item)
         if (current_bit_cnt == 8)
         {
             fwrite(&current_byte, 1, 1, fid);
+            fflush(fid);
             current_byte = 0;
             current_bit_cnt = 0;
         }
-    }
+    }    
 }
 
 void file_read(const char * file_name, unsigned char * image, unsigned int width, unsigned int height)

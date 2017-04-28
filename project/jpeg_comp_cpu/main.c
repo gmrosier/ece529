@@ -14,7 +14,7 @@ int main(int argc, char * argv[])
 
     // Read File
     file_read("lena_gray.raw", image, 512, 512);
-
+    
     // Init Q Table
     init_qtable(50.0f);
 
@@ -22,6 +22,9 @@ int main(int argc, char * argv[])
     fid = open_stream("lena_gray.jpg", 512, 512);
     if (fid != NULL)
     {
+        // Flush Header to Disk
+        fflush(fid);
+
         // Compress
         compress_img(image, 512, 512, fid);
 

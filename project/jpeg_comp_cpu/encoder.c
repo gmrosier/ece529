@@ -248,7 +248,7 @@ void zero_shift(unsigned char * input, float * output)
 {
     for (int i = 0; i < 8 * 8; i++)
     {
-        output[i] = (float)(input[i]) - 127.0f;
+        output[i] = (float)(input[i]) - 128.0f;
     }
 }
 
@@ -309,7 +309,7 @@ void zero_rle(short * input, rle_info * output, unsigned int * length, short * p
         // Count Zeros
         if (input[i] == 0)
         {
-            zero_cnt += 1;
+            zero_cnt++;
         }
         else
         {
@@ -363,11 +363,14 @@ void encode(rle_info * rle, unsigned int rle_length, huff_info * table, FILE * f
         item.additional = additional;
         item.add_length = num_bits;
 
+        // Code Idx (Zero Run Upper Nibble, Num Bits Lower Nibble) [RRRR, SSSS]
+        int code_idx = (rle[i].zero_cnt << 4) + num_bits;
+
         // Code
-        item.value = table[num_bits].value;
+        item.value = table[code_idx].value;
 
         // Length
-        item.length = table[num_bits].length;
+        item.length = table[code_idx].length;
 
         // Write
         write_stream(fid, &item);
