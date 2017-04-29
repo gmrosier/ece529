@@ -26,10 +26,10 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="jpef_file.h">
+    <ClInclude Include="encoder.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="encoder.h">
+    <ClInclude Include="jpeg_file.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

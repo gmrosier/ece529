@@ -286,7 +286,7 @@ int num_bits(int value)
         return 0;
 
     // Take Absolute Value
-    value = fabs(value);
+    value = abs(value);
 
     // Find Min Number of Bits Need to Store This Number
     for (int i = 1; i < 8; i++)
