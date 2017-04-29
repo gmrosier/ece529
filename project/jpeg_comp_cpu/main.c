@@ -2,31 +2,47 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "common.h"
 #include "jpeg_file.h"
 #include "encoder.h"
 
 int main(int argc, char * argv[])
 {
-    unsigned int bit_len = 512 * 512 * 16;
-    unsigned int image_size_bytes = 512 * 512;
-    unsigned char * image = (unsigned char *)malloc(image_size_bytes);
+    TIME_TYPE t1, t2;
+    double delta_us;
+    unsigned int width;
+    unsigned int height;
+    unsigned char * image;
     FILE * fid;
 
+    if (argc != 5)
+    {
+        printf("Usage: %s [input raw file] [width] [height] [output file]\n", argv[0]);
+        exit(-1);
+    }
+    width = atoi(argv[2]);
+    height = atoi(argv[3]);
+    image = (unsigned char *)malloc(width * height);
+
     // Read File
-    file_read("lena_gray.raw", image, 512, 512);
+    file_read(argv[1], image, width, height);
     
     // Init Q Table
     init_qtable(50.0f);
 
     // Write Out JPEG
-    fid = open_stream("lena_gray.jpg", 512, 512);
+    fid = open_stream(argv[4], width, height);
     if (fid != NULL)
     {
         // Flush Header to Disk
         fflush(fid);
 
         // Compress
-        compress_img(image, 512, 512, fid);
+        OS_TIMER_START(t1);
+        compress_img(image, width, height, fid);
+        OS_TIMER_STOP(t2);
+        OS_TIMER_CALC(t1, t2, delta_us);
+        printf("Image Compression Too %.3f us\n", delta_us);
 
         // Close File
         close_stream(fid);

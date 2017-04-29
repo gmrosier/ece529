@@ -1,28 +1,10 @@
 #include "encoder.h"
-#include "jpeg_file.h"
 
 #include <stdlib.h>
 #include <math.h>
 
-#ifndef max
-#define max(a, b) ((a > b) ? a : b)
-#endif
-
-#ifndef min
-#define min(a, b) ((a <= b) ? a : b)
-#endif
-
-//const unsigned char vQTable[8 * 8] =
-//{
-//    16, 11, 10, 16,  24,  40,  51,  61,
-//    12, 11, 14, 19,  26,  58,  60,  55,
-//    14, 13, 16, 24,  40,  57,  69,  56,
-//    14, 17, 22, 29,  41,  87,  80,  62,
-//    18, 22, 37, 56,  68, 109, 103,  77,
-//    24, 35, 55, 64,  81, 104, 113,  92,
-//    49, 64, 78, 87, 103, 121, 120, 101,
-//    72, 92, 95, 98, 112, 100, 103,  99
-//};
+#include "common.h"
+#include "jpeg_file.h"
 
 const unsigned char vQTable[8 * 8] =
 {
@@ -45,7 +27,7 @@ void init_qtable(float quality_factor)
         unsigned int value = ((unsigned int)(vQTable[i] * (quality_factor + 50.0f))) / 100;
         value = max(1, min(255, value));
         qTable[i] = (unsigned char)value;
-    }   
+    }
 }
 
 const unsigned char * get_qtable()
@@ -66,7 +48,7 @@ const float angle[7] = {
 #define C(x) (angle[x-1])
 #define S(x) (angle[6-(x-1)])
 
-const unsigned char readPattern[8 * 8] =
+const unsigned char output_pattern[8 * 8] =
 {
     0,   1,  5,  6, 14, 15, 27, 28,
     2,   4,  7, 13, 16, 26, 29, 42,
@@ -80,7 +62,7 @@ const unsigned char readPattern[8 * 8] =
 
 const unsigned char * get_read_pattern()
 {
-    return readPattern;
+    return output_pattern;
 }
 
 typedef struct
@@ -155,103 +137,139 @@ const unsigned int get_code_count(unsigned char isDC)
     return 162;
 }
 
-// 1-D DCT based on Vetterli and Ligtenberg
-// Will delay divide by two to quantization
-// because once we have an integer the divide
-// can be accomplished by a right shift.
-void dct1d(float * input, float * output)
+// Row based 1-D DCT.
+//  1-D DCT based on Vetterli and Ligtenberg
+//  but we will delay divide by two to quantization
+//  because once we have an integer the divide
+//  can be accomplished by 1 divide instead of two
+void rdct1d(float * block)
 {
-    // Sum Terms
-    float s07 = input[0] + input[7];
-    float s12 = input[1] + input[2];
-    float s34 = input[3] + input[4];
-    float s56 = input[5] + input[6];
-
-    // Difference Terms
-    float d07 = input[0] - input[7];
-    float d12 = input[1] - input[2];
-    float d34 = input[3] - input[4];
-    float d56 = input[5] - input[6];
-
-    // Combined Terms
-    float ss07s34 = s07 + s34;
-    float ss12s56 = s12 + s56;
-    float sd12d56 = d12 + d56;
-    float dd12d56 = d12 - d56;
-    float ds07s34 = s07 - s34;
-    float ds12s56 = s12 - s56;
-
-    // Combine More Terms w/ Multiply
-    float C4mds12s56 = C(4) * ds12s56;
-    float C4msd12d56 = C(4) * sd12d56;
-
-    //output
-    // S0 =  C4 * ((s07 + s34) + (s12 + s56))
-    //output[0] = (C(4) * (ss07s34 + ss12s56)) / 2.0f;
-    output[0] = (C(4) * (ss07s34 + ss12s56));
-
-    // S1 =  C1 * (d07 + C4mds12s56) - S1 * (-d34 - C4msd12d56)
-    //output[1] = (C(1) * (d07 + C4mds12s56) - S(1) * (-d34 - C4msd12d56)) / 2.0f;
-    output[1] = (C(1) * (d07 + C4mds12s56) - S(1) * (-d34 - C4msd12d56));
-
-    // S2 =  C6 * (dd12d56) + S6 * (ds07s34)
-    //output[2] = (C(6) * dd12d56 + S(6) * ds07s34) / 2.0f;
-    output[2] = (C(6) * dd12d56 + S(6) * ds07s34);
-
-    // S3 =  C3 * (d07 - C4 * (ds12s56)) - S3 * (d34 - C4 * (d12 + d56))
-    //output[3] = (C(3) * (d07 - C4mds12s56) - S(3) * (d34 - C4msd12d56)) / 2.0f;
-    output[3] = (C(3) * (d07 - C4mds12s56) - S(3) * (d34 - C4msd12d56));
-
-    // S4 =  C4 * ((s07 + s34) - (s12 + s56))
-    //output[4] = (C(4) * (ss07s34 - ss12s56)) / 2.0f;
-    output[4] = (C(4) * (ss07s34 - ss12s56));
-
-    // S5 =  S3 * (d07 - C4 * (s12 - s56)) + C3 * (d34 - C4 * (d12 + d56))
-    //output[5] = (S(3) * (d07 - C4mds12s56) + C(3) * (d34 - C4msd12d56)) / 2.0f;
-    output[5] = (S(3) * (d07 - C4mds12s56) + C(3) * (d34 - C4msd12d56));
-
-    // S6 = -S6 * (d12 - d56) + C6 * (s07 - s34)
-    //output[6] = (-S(6) * dd12d56 + C(6) * ds07s34) / 2.0f;
-    output[6] = (-S(6) * dd12d56 + C(6) * ds07s34);
-
-    // S7 =  S1 * (d07 + C4 * (s12 - s56)) + C1 * (-d34 - C4 * (d12 + d56))
-    //output[7] = (S(1) * (d07 + C4mds12s56) + C(1) * (-d34 - C4msd12d56)) / 2.0f;
-    output[7] = (S(1) * (d07 + C4mds12s56) + C(1) * (-d34 - C4msd12d56));
-}
-
-void transpose(float * input, float * output)
-{
-    for (int r = 0; r < 8; r++)
+    for (unsigned int i = 0; i < 8; i++)
     {
-        for (int c = 0; c < 8; c++)
-        {
-            output[c * 8 + r] = input[r * 8 + c];
-        }
+        unsigned int row = 8 * i;
+
+        // Sum Terms
+        float s07 = block[row] + block[7 + row];
+        float s12 = block[1 + row] + block[2 + row];
+        float s34 = block[3 + row] + block[4 + row];
+        float s56 = block[5 + row] + block[6 + row];
+
+        // Difference Terms
+        float d07 = block[row] - block[7 + row];
+        float d12 = block[1 + row] - block[2 + row];
+        float d34 = block[3 + row] - block[4 + row];
+        float d56 = block[5 + row] - block[6 + row];
+
+        // Combined Terms
+        float ss07s34 = s07 + s34;
+        float ss12s56 = s12 + s56;
+        float sd12d56 = d12 + d56;
+        float dd12d56 = d12 - d56;
+        float ds07s34 = s07 - s34;
+        float ds12s56 = s12 - s56;
+
+        // Combine More Terms w/ Multiply
+        float C4mds12s56 = C(4) * ds12s56;
+        float C4msd12d56 = C(4) * sd12d56;
+
+        //output
+        // S0 =  C4 * ((s07 + s34) + (s12 + s56))
+        block[row] = (C(4) * (ss07s34 + ss12s56));
+
+        // S1 =  C1 * (d07 + C4mds12s56) - S1 * (-d34 - C4msd12d56)
+        block[1 + row] = (C(1) * (d07 + C4mds12s56) - S(1) * (-d34 - C4msd12d56));
+
+        // S2 =  C6 * (dd12d56) + S6 * (ds07s34)
+        block[2 + row] = (C(6) * dd12d56 + S(6) * ds07s34);
+
+        // S3 =  C3 * (d07 - C4 * (ds12s56)) - S3 * (d34 - C4 * (d12 + d56))
+        block[3 + row] = (C(3) * (d07 - C4mds12s56) - S(3) * (d34 - C4msd12d56));
+
+        // S4 =  C4 * ((s07 + s34) - (s12 + s56))
+        block[4 + row] = (C(4) * (ss07s34 - ss12s56));
+
+        // S5 =  S3 * (d07 - C4 * (s12 - s56)) + C3 * (d34 - C4 * (d12 + d56))
+        block[5 + row] = (S(3) * (d07 - C4mds12s56) + C(3) * (d34 - C4msd12d56));
+
+        // S6 = -S6 * (d12 - d56) + C6 * (s07 - s34)
+        block[6 + row] = (-S(6) * dd12d56 + C(6) * ds07s34);
+
+        // S7 =  S1 * (d07 + C4 * (s12 - s56)) + C1 * (-d34 - C4 * (d12 + d56))
+        block[7 + row] = (S(1) * (d07 + C4mds12s56) + C(1) * (-d34 - C4msd12d56));
     }
 }
 
-void dct2d(float * input, float * output)
+// Column based 1-D DCT.
+//  1-D DCT based on Vetterli and Ligtenberg
+//  but we will delay divide by two to quantization
+//  because once we have an integer the divide
+//  can be accomplished by 1 divide instead of two
+void cdct1d(float * block)
 {
-    float tmp[8 * 8];
-
-    // Transpose
-    transpose(input, tmp);
-
-    // 1D-DCT
-    for (int i = 0; i < 8; i++)
+    for (unsigned int i = 0; i < 8; i++)
     {
-        dct1d(&tmp[i * 8], &output[i * 8]);
-    }
+        // Sum Terms
+        float s07 = block[i] + block[56 + i];
+        float s12 = block[8 + i] + block[16 + i];
+        float s34 = block[24 + i] + block[32 + i];
+        float s56 = block[40 + i] + block[48 + i];
 
-    // Transpose
-    transpose(output, tmp);
+        // Difference Terms
+        float d07 = block[0 + i] - block[56 + i];
+        float d12 = block[8 + i] - block[16 + i];
+        float d34 = block[24 + i] - block[32 + i];
+        float d56 = block[40 + i] - block[48 + i];
 
-    // 1D-DCT
-    for (int i = 0; i < 8; i++)
-    {
-        dct1d(&tmp[i * 8], &output[i * 8]);
+        // Combined Terms
+        float ss07s34 = s07 + s34;
+        float ss12s56 = s12 + s56;
+        float sd12d56 = d12 + d56;
+        float dd12d56 = d12 - d56;
+        float ds07s34 = s07 - s34;
+        float ds12s56 = s12 - s56;
+
+        // Combine More Terms w/ Multiply
+        float C4mds12s56 = C(4) * ds12s56;
+        float C4msd12d56 = C(4) * sd12d56;
+
+        //output
+        // S0 =  C4 * ((s07 + s34) + (s12 + s56))
+        block[i] = (C(4) * (ss07s34 + ss12s56));
+
+        // S1 =  C1 * (d07 + C4mds12s56) - S1 * (-d34 - C4msd12d56)
+        block[8 + i] = (C(1) * (d07 + C4mds12s56) - S(1) * (-d34 - C4msd12d56));
+
+        // S2 =  C6 * (dd12d56) + S6 * (ds07s34)
+        block[16 + i] = (C(6) * dd12d56 + S(6) * ds07s34);
+
+        // S3 =  C3 * (d07 - C4 * (ds12s56)) - S3 * (d34 - C4 * (d12 + d56))
+        block[24 + i] = (C(3) * (d07 - C4mds12s56) - S(3) * (d34 - C4msd12d56));
+
+        // S4 =  C4 * ((s07 + s34) - (s12 + s56))
+        block[32 + i] = (C(4) * (ss07s34 - ss12s56));
+
+        // S5 =  S3 * (d07 - C4 * (s12 - s56)) + C3 * (d34 - C4 * (d12 + d56))
+        block[40 + i] = (S(3) * (d07 - C4mds12s56) + C(3) * (d34 - C4msd12d56));
+
+        // S6 = -S6 * (d12 - d56) + C6 * (s07 - s34)
+        block[48 + i] = (-S(6) * dd12d56 + C(6) * ds07s34);
+
+        // S7 =  S1 * (d07 + C4 * (s12 - s56)) + C1 * (-d34 - C4 * (d12 + d56))
+        block[56 + i] = (S(1) * (d07 + C4mds12s56) + C(1) * (-d34 - C4msd12d56));
     }
 }
+
+// Wrapper Function to call both the
+// row and column based 1D-DCTs.
+void dct2d(float * block)
+{
+    // Row 1D-DCT
+    rdct1d(block);
+
+    // Column 1D-DCT
+    cdct1d(block);
+}
+
 
 void zero_shift(unsigned char * input, float * output)
 {
@@ -264,19 +282,12 @@ void zero_shift(unsigned char * input, float * output)
 
 // Divide the 2D-DCT by the specified quantization table
 // We also divide by 4 to take out the 2x scaling in the 1D-DCT
-void quantization(float * input, const unsigned char * qTable, short * output)
+// We also store the data in the zig-zag order
+void quant_zigzag(float * input, const unsigned char * qTable, short * output)
 {
     for (int i = 0; i < 8 * 8; i++)
     {
-        output[i] = ((short)roundf(input[i] / (float)qTable[i])) / 4;
-    }
-}
-
-void zigzag(const short * input, short * output)
-{
-    for (int i = 0; i < 8 * 8; i++)
-    {
-        output[readPattern[i]] = input[i];
+        output[output_pattern[i]] = ((short)roundf(input[i] / (float)qTable[i])) / 4;
     }
 }
 
@@ -299,6 +310,7 @@ int num_bits(int value)
     return 8;
 }
 
+// Scan the 8x8 and convert it to a run length encoded stram of values
 void zero_rle(short * input, rle_info * output, unsigned int * length, short * prev_dc)
 {
     // Get Diff
@@ -355,9 +367,11 @@ void zero_rle(short * input, rle_info * output, unsigned int * length, short * p
     output[idx].value = 0;
 
     // Return RLE Length
-    *length = idx+1;
+    *length = idx + 1;
 }
 
+// Take the Run Length Encoding and encode it to a binary file using 
+// the Huffman codes provided in the table.
 void encode(rle_info * rle, unsigned int rle_length, huff_info * table, FILE * fid)
 {
     encode_info item;
@@ -389,11 +403,10 @@ void encode(rle_info * rle, unsigned int rle_length, huff_info * table, FILE * f
     }
 }
 
+// Compress an 8x8 Block
 void compress_8x8(unsigned char * block, short * prev_dc, FILE * fid)
 {
-    float tmp[8 * 8];
     float input[8 * 8];
-    short q[8 * 8];
     short zz[8 * 8];
     rle_info rle[64];
     unsigned int rle_length;
@@ -402,13 +415,10 @@ void compress_8x8(unsigned char * block, short * prev_dc, FILE * fid)
     zero_shift(block, input);
 
     // Calculate 2D DCT
-    dct2d(input, tmp);
+    dct2d(input);
 
     // Quantization 
-    quantization(tmp, qTable, q);
-
-    // Reorder Values
-    zigzag(q, zz);
+    quant_zigzag(input, qTable, zz);
 
     // Zero Run-Length Encode
     zero_rle(zz, rle, &rle_length, prev_dc);
@@ -420,6 +430,7 @@ void compress_8x8(unsigned char * block, short * prev_dc, FILE * fid)
     encode(&rle[1], rle_length - 1, ac_table, fid);
 }
 
+// Compress A Full Image
 void compress_img(unsigned char * img, unsigned int width, unsigned int height, FILE * fid)
 {
     // Load Huffman Tables

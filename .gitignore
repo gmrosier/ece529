@@ -51,3 +51,4 @@ project/jpeg_comp_cpu/Debug/
 project/jpeg_comp_cpu/\.vscode/
 
 project/jpeg_comp_cpu/jpeg_encoder
+/project/jpeg_comp_cpu/output.jpg

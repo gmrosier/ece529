@@ -34,7 +34,7 @@ void write_quantization(FILE * fid)
     fwrite(qtable, 1, 64, fid);
 }
 
-void write_start_of_frame(FILE * fid)
+void write_start_of_frame(FILE * fid, unsigned short width, unsigned short height)
 {
     unsigned char data[13];
 
@@ -50,12 +50,12 @@ void write_start_of_frame(FILE * fid)
     data[4] = 8;
     
     // Number of Lines
-    data[5] = MSB(512);
-    data[6] = LSB(512);
+    data[5] = MSB(height);
+    data[6] = LSB(height);
     
     // Samples Per Line
-    data[7] = MSB(512);
-    data[8] = LSB(512);
+    data[7] = MSB(width);
+    data[8] = LSB(width);
     
     // Components in Frame
     data[9] = 1;
@@ -128,7 +128,7 @@ void write_scan_header(FILE * fid)
     fwrite(data, 1, 10, fid);
 }
 
-FILE * open_stream(const char * file_name, unsigned int height, unsigned int width)
+FILE * open_stream(const char * file_name, unsigned int width, unsigned int height)
 {
     FILE * fid;
     unsigned char data[2];
@@ -150,7 +150,7 @@ FILE * open_stream(const char * file_name, unsigned int height, unsigned int wid
     write_quantization(fid);
 
     // Write Start Of Frame
-    write_start_of_frame(fid);
+    write_start_of_frame(fid, width, height);
 
     // Write DC Huffman Table
     write_huffman(fid, 1);
