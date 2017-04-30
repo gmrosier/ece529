@@ -1,11 +1,48 @@
+//==========================================================================
+// This file contains the functions needed to output the JPEG image and all
+// the required header portions.
+//
+// Author: George Rosier (gmrosier@email.arizona.edu)
+// Date: 4/02/2017
+//==========================================================================
+
 #ifndef JPEG_FILE_H
 #define JPEG_FILE_H
 
 #include <stdio.h>
 #include "encoder.h"
 
+//================================================================================
+// This function will open the output file and fill in the proper JPEG header
+// information.
+//
+// Parameters:
+//  file_name   - Output File Name
+//  width       - The width of the input & output images
+//  height      - The height of the input & output images
+//  info        - The individual color  channel information
+//  channels    - The number of color channels in the image
+//
+// Return:
+//  It will return the file id of the opened output file
+//================================================================================
 FILE * open_stream(const char * file_name, unsigned int width, unsigned int height, ChannelInfo * info, unsigned int channels);
+
+//================================================================================
+// This function will close the JPEG file and write out the end of image marker.
+//
+// Parameters:
+//  fid - Output File ID
+//================================================================================
 void close_stream(FILE * fid);
+
+//================================================================================
+// This function write the encoded information to the file.
+//
+// Parameters:
+//  fid     - Output File ID
+//  item    - The encoded item to be outputed to file
+//================================================================================
 void write_stream(FILE * fid, const EncodeInfo * item);
 
 //================================================================================

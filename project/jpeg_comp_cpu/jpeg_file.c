@@ -1,13 +1,35 @@
-#include "jpeg_file.h"
+//==========================================================================
+// This file contains the functions needed to output the JPEG image and all
+// the required header portions.
+//
+// Author: George Rosier (gmrosier@email.arizona.edu)
+// Date: 4/02/2017
+//==========================================================================
 #include <stdlib.h>
 #include <math.h>
 
+#include "jpeg_file.h"
+
+//==========================================================================
+// Helper Macros for getting the MSB and LSB out of a short
+//==========================================================================
 #define MSB(X) ((X >> 8) & 0xFF)
 #define LSB(X) (X & 0xFF)
 
+//==========================================================================
+// Local Variables for Storing the current byte and its bit count
+//==========================================================================
 static unsigned char current_byte = 0;
 static unsigned char current_bit_cnt = 0;
 
+
+//==========================================================================
+// Writes the quantization tables out to file.
+//
+// Parameters:
+//  fid         - The output file id
+//  channels    - The number of color channels in the image
+//==========================================================================
 void write_quantization(FILE * fid, unsigned int channels)
 {
     unsigned char data[4];
@@ -55,6 +77,16 @@ void write_quantization(FILE * fid, unsigned int channels)
     }
 }
 
+//==========================================================================
+// Writes the start of frame (SOF) to file
+//
+// Parameters:
+//  fid         - The output file id
+//  width       - The image width
+//  height      - The image height
+//  info        - The individual color channel information
+//  channels    - The number of color channels in the image
+//==========================================================================
 void write_start_of_frame(FILE * fid, unsigned int width, unsigned int height, ChannelInfo * info, unsigned int channels)
 {
     unsigned short length = 8 + (3 * channels);
@@ -119,6 +151,15 @@ void write_start_of_frame(FILE * fid, unsigned int width, unsigned int height, C
     fwrite(data, 1, length+2, fid);
 }
 
+//==========================================================================
+// Writes the Huffman codes and values to file
+//
+// Parameters:
+//  fid         - The output file id
+//  code_cnt    - Huffman Code Count
+//  lengths     - Array of Code Lengths
+//  values      - Array of Code Values
+//==========================================================================
 void write_huffman(FILE * fid, unsigned char id, unsigned int code_cnt, const unsigned char * lengths, const unsigned char * values)
 {
     unsigned char data[5];
@@ -144,6 +185,13 @@ void write_huffman(FILE * fid, unsigned char id, unsigned int code_cnt, const un
     fwrite(values, 1, code_cnt, fid);
 }
 
+//==========================================================================
+// Writes the start of scan (SOS) to file
+//
+// Parameters:
+//  fid         - The output file id
+//  channels    - The number of color channels in the image
+//==========================================================================
 void write_scan_header(FILE * fid, unsigned int channels)
 {
     unsigned char data[5];
@@ -186,6 +234,20 @@ void write_scan_header(FILE * fid, unsigned int channels)
     fwrite(data, 1, 3, fid);
 }
 
+//================================================================================
+// This function will open the output file and fill in the proper JPEG header
+// information.
+//
+// Parameters:
+//  file_name   - Output File Name
+//  width       - The width of the input & output images
+//  height      - The height of the input & output images
+//  info        - The individual color  channel information
+//  channels    - The number of color channels in the image
+//
+// Return:
+//  It will return the file id of the opened output file
+//================================================================================
 FILE * open_stream(const char * file_name, unsigned int width, unsigned int height, ChannelInfo * info, unsigned int channels)
 {
     FILE * fid;
@@ -227,6 +289,12 @@ FILE * open_stream(const char * file_name, unsigned int width, unsigned int heig
     return fid;
 }
 
+//================================================================================
+// This function will close the JPEG file and write out the end of image marker.
+//
+// Parameters:
+//  fid - Output File ID
+//================================================================================
 void close_stream(FILE * fid)
 {
     unsigned char data[2];
@@ -246,17 +314,32 @@ void close_stream(FILE * fid)
     fclose(fid);
 }
 
+//================================================================================
+// This function write the encoded information to the file.
+//
+// Parameters:
+//  fid     - Output File ID
+//  item    - The encoded item to be outputed to file
+//================================================================================
 void write_stream(FILE * fid, const EncodeInfo * item)
 {
+    // Get Information from the info
     unsigned int code_length = item->length + item->add_length;
     unsigned int code = (item->value & ((1 << item->length) - 1)) << item->add_length;
     code += item->additional & ((1 << item->add_length) - 1);
     
+    // Write out Code
     while (code_length > 0)
     {
+        // Get the Remaning bits left in the current byte
         unsigned int rem_len = 8 - current_bit_cnt;
+
+        // Store Code into current byte
         if (code_length > rem_len)
         {
+            // Code is greater then the bits left, so we
+            // need to add the bits we can to the current
+            // byte and continue.
             unsigned short mask = ((1 << rem_len) - 1);
             unsigned short len_diff = code_length - rem_len;
             unsigned short value = (code >> len_diff) & mask;
@@ -267,6 +350,9 @@ void write_stream(FILE * fid, const EncodeInfo * item)
         }
         else
         {
+            // Code is smaller then the bits left, so we
+            // add all the code bits to the current byte
+            // and move to the next code
             unsigned short mask = ((1 << code_length) - 1);
             unsigned short value = (code & mask) << (rem_len - code_length);
             current_byte += (unsigned char)value;
@@ -274,8 +360,12 @@ void write_stream(FILE * fid, const EncodeInfo * item)
             code_length = 0;
         }
 
+        // If we have a bytes worth of data in 
+        // the current byte then we need to write
+        // the byte out to file.
         if (current_bit_cnt == 8)
         {
+            // Write Byte to File
             fwrite(&current_byte, 1, 1, fid);
             
             // Check if the byte we currently
@@ -290,7 +380,8 @@ void write_stream(FILE * fid, const EncodeInfo * item)
                 current_byte = 0;
                 fwrite(&current_byte, 1, 1, fid);
             }
-            fflush(fid);
+            
+            // Reset Counters
             current_byte = 0;
             current_bit_cnt = 0;
         }
@@ -448,6 +539,7 @@ void file_read(const char * file_name, unsigned int width, unsigned int height,
                     float y = 0.299f * r + 0.587f * g + 0.114f * b;
                     info[0].data[offset + i] = (unsigned char)y;
 
+                    // Handle Cb/Cr Channels
                     if ((row % 2) == 0)
                     {
                         unsigned int alt = (row % 4) / 2;

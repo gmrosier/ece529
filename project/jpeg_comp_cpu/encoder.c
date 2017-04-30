@@ -55,6 +55,9 @@ void init_qtable(unsigned int quality)
 
 //==========================================================================
 // Helper function for fetching the currect luminance quantization table.
+//
+// Return:
+//  Luminance Quantization Table
 //==========================================================================
 const unsigned char * get_yqtable()
 {
@@ -63,6 +66,9 @@ const unsigned char * get_yqtable()
 
 //==========================================================================
 // Helper function for fetching the currect chrominance quantization table.
+//
+// Return:
+//  Chrominance Quantization Table
 //==========================================================================
 const unsigned char * get_cqtable()
 {
@@ -71,6 +77,9 @@ const unsigned char * get_cqtable()
 
 //==========================================================================
 // Helper function for fetching the zigzag read pattern
+//
+// Return:
+//  Zig-Zag Read Pattern
 //==========================================================================
 const unsigned char * get_read_pattern()
 {
@@ -113,6 +122,13 @@ void load_huffman_table(const unsigned char * codes_per_len, const unsigned char
 
 //==========================================================================
 // Helper function for fetching the Huffman code length array
+//
+// Parameters:
+//  isDC    - Flag for we are requesting the DC codes
+//  channel - The codes for this specified channel
+//
+// Return:
+//  Huffman code length array
 //==========================================================================
 const unsigned char * get_code_lens(unsigned char isDC, unsigned int channel)
 {
@@ -138,6 +154,13 @@ const unsigned char * get_code_lens(unsigned char isDC, unsigned int channel)
 
 //==========================================================================
 // Helper function for getting the Huffman code values array
+//
+// Parameters:
+//  isDC    - Flag for we are requesting the DC codes
+//  channel - The codes for this specified channel
+//
+// Return:
+//  Huffman code values array
 //==========================================================================
 const unsigned char * get_code_values(unsigned char isDC, unsigned int channel)
 {
@@ -162,7 +185,13 @@ const unsigned char * get_code_values(unsigned char isDC, unsigned int channel)
 }
 
 //==========================================================================
-// Helper function that will get the numnber of Huffman codes.
+// Helper function that will get the numnber of Huffman codes
+//
+// Parameters:
+//  isDC    - Flag for we are requesting the DC codes
+//
+// Return:
+//  Numnber of Huffman codes
 //==========================================================================
 const unsigned int get_code_count(unsigned char isDC)
 {
