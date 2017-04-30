@@ -431,7 +431,7 @@ void compress_8x8(unsigned char * block, short * prev_dc, FILE * fid)
 }
 
 // Compress A Full Image
-void compress_img(unsigned char * img, unsigned int width, unsigned int height, FILE * fid)
+void compress_img(unsigned char * img, unsigned int width, unsigned int height, unsigned int channels, FILE * fid)
 {
     // Load Huffman Tables
     load_huffman_table(dc_codes_per_len, dc_values, dc_table);

@@ -12,7 +12,7 @@ typedef struct
 } encode_info;
 
 void init_qtable(float quality_factor);
-void compress_img(unsigned char * img, unsigned int width, unsigned int height, FILE * fid);
+void compress_img(unsigned char * img, unsigned int width, unsigned int height, unsigned int channels, FILE * fid);
 const unsigned char * get_code_lens(unsigned char isDC);
 const unsigned char * get_code_values(unsigned char isDC);
 const unsigned int get_code_count(unsigned char isDC);

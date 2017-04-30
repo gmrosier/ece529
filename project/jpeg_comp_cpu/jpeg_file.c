@@ -227,19 +227,81 @@ void write_stream(FILE * fid, const encode_info * item)
     }    
 }
 
-void file_read(const char * file_name, unsigned char * image, unsigned int width, unsigned int height)
+//================================================================================
+// This function reads file with the specified parameters and stores it in the
+// following format. This file will also convert a RGB image to YCrCb 4:2:0
+// format. This function assumes that the input file is a raw binary format
+// that is either 8-bit grayscale or 24-bit (stored in a 32-bit) RGB format.
+// For the RGB images this code assumes that the data is stored in local byte
+// order and that it looks like the following.
+//
+//  RGB Pixel Format:
+//  ====================================================
+//  |    BITS ||31 ... 24|23 ... 16|15 ...  8| 7 ...  0|
+//  |---------||---------|---------|---------|---------|
+//  |   COLOR ||  UNUSED |     RED |   GREEN |    BLUE |
+//  ====================================================
+//  
+//
+//  Input Image                         Output Array
+//  11111111222222223333333344444440    1111111111111111111111111111111111111111111111111111111111111111
+//  11111111222222223333333344444440    2222222222222222222222222222222222222222222222222222222222222222
+//  11111111222222223333333344444440    3333333333333333333333333333333333333333333333333333333333333333
+//  11111111222222223333333344444440    4444444444444444444444444444444444444444444444444444444400000000
+//  11111111222222223333333344444440
+//  11111111222222223333333344444440
+//  11111111222222223333333344444440
+//  11111111222222223333333344444440
+//
+// Parameters:
+//      file_name   - The file to open and read the image from
+//      image       - The a pointer to the loaded image
+//      width       - The original input width, will return a size that is
+//                    divisable by 8.
+//      height      - The original input height, will return a size that is
+//                    divisable by 8.
+//      channels    - The number of channels in the image, the two valid values
+//                    are either 1 for grayscale or 3 for 24-bit RGB.
+//================================================================================
+void file_read(const char * file_name, unsigned int width, unsigned int height,
+               unsigned int channels, ChannelInfo * info)
 {
     FILE * fid = NULL;
+    unsigned int img_size = width * height;
+
+    // Check for Valid # of Channels
+    if ((channels != 1) && (channels != 3))
+    {
+        printf("Invalid # of Channels: %d (1,3 are the only valid options)\n", channels);
+        exit(-1);
+    }
 
     // Calculate Bounds
-    unsigned int img_size = width * height;
-    unsigned int xblocks = width / 8;
+    for (unsigned int i = 0; i < channels; i++)
+    {
+        unsigned int w_div= 8;
+        unsigned int h_div = 8;
+
+        if (i != 0)
+        {
+            w_div *= 4;
+            h_div *= 2;
+        }
+
+        info[i].width = ((width + w_div - 1) / w_div) * w_div;
+        info[i].height = ((height + h_div - 1) / h_div) * h_div;
+        info[i].data = (unsigned char *)malloc(info[i].width * info[i].height);
+    }
 
     // Open File
     fid = fopen(file_name, "rb");
     if (fid == NULL)
     {
         printf("Failed to Open File: %s\n", file_name);
+        for (unsigned int i = 0; i < channels; i++)
+        {
+            free(info[i].data);
+        }
         exit(-1);
     }
 
@@ -247,33 +309,98 @@ void file_read(const char * file_name, unsigned char * image, unsigned int width
     unsigned int row = 0;
     unsigned int xblock = 0;
     unsigned int yblock = 0;
-    unsigned int offset;
+    unsigned int rowCnt;
 
     while (img_size > 0)
     {
-        offset = (yblock * xblocks * 8 * 8) + (xblock * 8 * 8) + (row * 8);
-        if (fread(&image[offset], 1, 8, fid) != 8)
+        // Read 1 Row of data from a file and store it an array that is orginized by block
+        rowCnt = width;
+        while (rowCnt > 0)
         {
-            printf("Error Reading File\n");
-            fclose(fid);
-            exit(-2);
-        }
+            unsigned int offset = (yblock * info[0].width * 8) + (xblock * 8 * 8) + (row * 8);
+            unsigned int size = min(8, rowCnt);
 
-        img_size -= 8;
-        xblock++;
-
-        if (xblock == xblocks)
-        {
-            row++;
-            xblock = 0;
-
-            if (row == 8)
+            if (channels == 1)
             {
-                row = 0;
-                yblock++;
+                // Handle 8-bit Grayscale Image
+                if (fread(&info[0].data[offset], 1, size, fid) != size)
+                {
+                    printf("Error Reading File\n");
+                    for (unsigned int i = 0; i < channels; i++)
+                    {
+                        free(info[i].data);
+                    }
+                    exit(-1);
+                }
             }
+            else
+            {
+                // Handle 24-bit RGB Image
+                unsigned int buffer[8];
+                unsigned int elements = 0;
+                if ((elements = fread(buffer, 4, size, fid)) != size)
+                {
+                    printf("Error Reading File: %d != %d\n", size, elements);
+                    for (unsigned int i = 0; i < channels; i++)
+                    {
+                        free(info[i].data);
+                    }
+                    exit(-1);
+                }
+
+                // Convert to YCrCb
+                for (unsigned int i = 0; i < size; i++)
+                {
+                    // Break RGB into individual colors
+                    // Assumes that values are stored in local
+                    // byte-order.
+                    unsigned int r = (buffer[i] >> 16) & 0xFF;
+                    unsigned int g = (buffer[i] >> 8) & 0xFF;
+                    unsigned int b = buffer[i] & 0xFF;
+
+                    // Handle Y Channel
+                    float y = 0.299f * r + 0.587f * g + 0.114f * b;
+                    info[0].data[offset + i] = (unsigned char)y;
+
+                    if ((row % 2) == 0)
+                    {
+                        unsigned int alt = (row % 4);
+                        unsigned int clrOffset = (yblock / 2) * info[1].width * 2 + (xblock / 4) * 8 * 8
+                                                    + (yblock % 2) * 4 * 8 + (xblock % 4) * 2 + row * 4 + i / 4;
+                        if (((i + alt) % 4) == 0)
+                        {
+                            
+                            float cb = 128.0f - 0.168736f * r - 0.331264f * g + 0.5f * b;
+                            info[1].data[clrOffset] = (unsigned char)cb;
+                        }
+
+                        if (((i + alt + 2) % 4) == 0)
+                        {
+                            float cr = 128.0f + 0.5f * r - 0.418688f * g - 0.081312f * b;
+                            info[2].data[clrOffset] = (unsigned char)cr;
+                        }
+                    }
+                }
+            }
+
+            rowCnt -= size;
+            xblock++;
         }
 
+        // Subtract Row for Size
+        img_size -= width;
+
+        // Reset X Block Idx
+        xblock = 0;
+
+        // Increment Row
+        row++;
+            
+        if (row == 8)
+        {
+            yblock++;
+            row = 0;
+        }
     }
 
     // Close File
