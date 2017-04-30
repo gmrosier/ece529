@@ -32,5 +32,8 @@
     <ClInclude Include="jpeg_file.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="tables.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

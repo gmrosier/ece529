@@ -51,7 +51,7 @@ int main(int argc, char * argv[])
         fflush(fid);
 
         // Compress
-        compress_img(info[0].data, info[0].width, info[0].height, channels, fid);
+        compress_img(info[0].data, channels, info, fid);
 
         // Close File
         close_stream(fid);

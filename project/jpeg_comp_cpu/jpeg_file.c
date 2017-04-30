@@ -12,7 +12,7 @@ void write_quantization(FILE * fid)
     unsigned char data[5];
     unsigned char qtable[64];
     const unsigned char * read_ptrn = get_read_pattern();
-    const unsigned char * q = get_qtable();
+    const unsigned char * q = get_yqtable();
 
     // Set QTable Marker
     data[0] = 0xFF;
@@ -184,7 +184,7 @@ void close_stream(FILE * fid)
     fclose(fid);
 }
 
-void write_stream(FILE * fid, const encode_info * item)
+void write_stream(FILE * fid, const EncodeInfo * item)
 {
     unsigned int code_length = item->length + item->add_length;
     unsigned int code = (item->value & ((1 << item->length) - 1)) << item->add_length;
@@ -284,7 +284,7 @@ void file_read(const char * file_name, unsigned int width, unsigned int height,
 
         if (i != 0)
         {
-            w_div *= 4;
+            w_div *= 2;
             h_div *= 2;
         }
 
@@ -364,17 +364,16 @@ void file_read(const char * file_name, unsigned int width, unsigned int height,
 
                     if ((row % 2) == 0)
                     {
-                        unsigned int alt = (row % 4);
-                        unsigned int clrOffset = (yblock / 2) * info[1].width * 2 + (xblock / 4) * 8 * 8
-                                                    + (yblock % 2) * 4 * 8 + (xblock % 4) * 2 + row * 4 + i / 4;
-                        if (((i + alt) % 4) == 0)
+                        unsigned int alt = (row % 4) / 2;
+                        unsigned int clrOffset = (yblock / 2) * info[1].width * 4 + (yblock % 2) * 8 * 4 + (xblock / 2) * 8 * 8 + (xblock % 2) * 4 + row * 4 + i / 2;
+                        if (((i + alt) % 2) == 0)
                         {
                             
                             float cb = 128.0f - 0.168736f * r - 0.331264f * g + 0.5f * b;
                             info[1].data[clrOffset] = (unsigned char)cb;
                         }
 
-                        if (((i + alt + 2) % 4) == 0)
+                        if (((i + alt + 1) % 2) == 0)
                         {
                             float cr = 128.0f + 0.5f * r - 0.418688f * g - 0.081312f * b;
                             info[2].data[clrOffset] = (unsigned char)cr;

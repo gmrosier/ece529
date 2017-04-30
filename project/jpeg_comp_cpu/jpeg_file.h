@@ -4,16 +4,9 @@
 #include <stdio.h>
 #include "encoder.h"
 
-typedef struct
-{
-    unsigned char * data;
-    unsigned int width;
-    unsigned int height;
-} ChannelInfo;
-
 FILE * open_stream(const char * file_name, unsigned int height, unsigned int width);
 void close_stream(FILE * fid);
-void write_stream(FILE * fid, const encode_info * item);
+void write_stream(FILE * fid, const EncodeInfo * item);
 
 //================================================================================
 // This function reads file with the specified parameters and stores it in the
