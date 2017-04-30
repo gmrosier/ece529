@@ -1,3 +1,12 @@
+//==========================================================================
+// This file implements the encoder portion of the softare. It is
+// responsible for taking a loaded image and encoding it into the JPEG
+// image format.
+//
+// Author: George Rosier (gmrosier@email.arizona.edu)
+// Date: 4/02/2017
+//==========================================================================
+
 #include "encoder.h"
 
 #include <stdlib.h>
@@ -6,41 +15,84 @@
 #include "tables.h"
 #include "jpeg_file.h"
 
-unsigned char yqTable[8 * 8];
-unsigned char cqTable[8 * 8];
+//==========================================================================
+// Local Variables to hold the scaled quantization tables.
+//==========================================================================
+static unsigned char yqTable[8 * 8];
+static unsigned char cqTable[8 * 8];
 
-void init_qtable(float quality_factor)
+//==========================================================================
+// Provided a uniform scaling factor to the quantization table.
+//
+// Parameter:
+//      quality - an integer from 1 to 100 that specifies the ammont of
+//                scaling to apply to the quantization table.
+//
+//                100 = Highest Quality, Least Compression
+//                50  = Normal Quality
+//                1   = Least Quality, Highest Compression
+//==========================================================================
+void init_qtable(unsigned int quality)
 {
+    quality = max(1, min(100, quality));
+
+    if (quality < 50)
+        quality = 5000 / quality;
+    else
+        quality = 200 - quality * 2;
+    
     for (int i = 0; i < 64; i++)
     {
-        unsigned int valuey = ((unsigned int)(y_qTable[i] * (quality_factor + 50.0f))) / 100;
-        valuey = max(1, min(255, valuey));
-        yqTable[i] = (unsigned char)valuey;
+        unsigned int value = (unsigned int)((y_qTable[i] * quality + 50.0f) / 100.0f);
+        value = max(1, min(255, value));
+        yqTable[i] = (unsigned char)value;
 
-        unsigned int valuec = ((unsigned int)(cr_qTable[i] * (quality_factor + 50.0f))) / 100;
-        valuec = max(1, min(255, valuec));
-        cqTable[i] = (unsigned char)valuec;
+        value = (unsigned int)((cr_qTable[i] * quality + 50.0f) / 100.0f);
+        value = max(1, min(255, value));
+        cqTable[i] = (unsigned char)value;
     }
 }
 
+//==========================================================================
+// Helper function for fetching the currect luminance quantization table.
+//==========================================================================
 const unsigned char * get_yqtable()
 {
     return yqTable;
 }
 
+//==========================================================================
+// Helper function for fetching the currect chrominance quantization table.
+//==========================================================================
 const unsigned char * get_cqtable()
 {
     return cqTable;
 }
 
+//==========================================================================
+// Helper function for fetching the zigzag read pattern
+//==========================================================================
 const unsigned char * get_read_pattern()
 {
     return output_pattern;
 }
 
-HuffInfo dc_table[12];
-HuffInfo ac_table[251];
+//==========================================================================
+// Local Variables to hold the luminance DC & AC Huffman Codes
+//==========================================================================
+static HuffInfo y_dc_table[12];
+static HuffInfo y_ac_table[256];
 
+//==========================================================================
+// Local Variables to hold the chrominance DC & AC Huffman Codes
+//==========================================================================
+static HuffInfo c_dc_table[12];
+static HuffInfo c_ac_table[256];
+
+//==========================================================================
+// Helper function that will take the huffman table specifcation and
+// populate the huffman table.
+//==========================================================================
 void load_huffman_table(const unsigned char * codes_per_len, const unsigned char * values, HuffInfo * table)
 {
     unsigned short code = 0;
@@ -59,22 +111,59 @@ void load_huffman_table(const unsigned char * codes_per_len, const unsigned char
     }
 }
 
-const unsigned char * get_code_lens(unsigned char isDC)
+//==========================================================================
+// Helper function for fetching the Huffman code length array
+//==========================================================================
+const unsigned char * get_code_lens(unsigned char isDC, unsigned int channel)
 {
     if (isDC == 1)
-        return y_dc_codes_per_len;
+    {
+        if (channel == 0)
+        {
+            return y_dc_codes_per_len;
+        }
+        else
+        {
+            return c_dc_codes_per_len;
+        }
+    }
+    
+    if (channel == 0)
+    {
+        return y_ac_codes_per_len;
+    }
 
-    return y_ac_codes_per_len;
+    return c_ac_codes_per_len;
 }
 
-const unsigned char * get_code_values(unsigned char isDC)
+//==========================================================================
+// Helper function for getting the Huffman code values array
+//==========================================================================
+const unsigned char * get_code_values(unsigned char isDC, unsigned int channel)
 {
     if (isDC == 1)
-        return y_dc_values;
+    {
+        if (channel == 0)
+        {
+            return y_dc_values;
+        }
+        else
+        {
+            return c_dc_values;
+        }
+    }
 
-    return y_ac_values;
+    if (channel == 0)
+    {
+        return y_ac_values;
+    }
+
+    return c_ac_values;
 }
 
+//==========================================================================
+// Helper function that will get the numnber of Huffman codes.
+//==========================================================================
 const unsigned int get_code_count(unsigned char isDC)
 {
     if (isDC == 1)
@@ -83,11 +172,21 @@ const unsigned int get_code_count(unsigned char isDC)
     return 162;
 }
 
+//==========================================================================
 // Row based 1-D DCT.
-//  1-D DCT based on Vetterli and Ligtenberg
-//  but we will delay divide by two to quantization
-//  because once we have an integer the divide
-//  can be accomplished by 1 divide instead of two
+// 1-D DCT based on Vetterli and Ligtenberg but we will delay divide by
+// two to quantization. This function performs the 1D-DCT inplace and will
+// destroy input data.
+//
+// Parameters:
+//     block - A pointer to a 8x8 pixels layed out linearly
+//             8x8 Memory Layout
+//                 00 = Pixel @ Row 0, Column 0
+//                 [ 00, 01, ..., 07, 10, 11, ..., 77]
+//
+// For more information about the algorithm see
+// Section 4.3.2 of JPEG: Still Image Data Comppression Standard.
+//==========================================================================
 void rdct1d(float * block)
 {
     for (unsigned int i = 0; i < 8; i++)
@@ -145,11 +244,21 @@ void rdct1d(float * block)
     }
 }
 
+//==========================================================================
 // Column based 1-D DCT.
-//  1-D DCT based on Vetterli and Ligtenberg
-//  but we will delay divide by two to quantization
-//  because once we have an integer the divide
-//  can be accomplished by 1 divide instead of two
+// 1-D DCT based on Vetterli and Ligtenberg but we will delay divide by
+// two to quantization. This function performs the 1D-DCT inplace and will
+// destroy input data.
+//
+// Parameters:
+//     block - A pointer to a 8x8 pixels layed out linearly
+//             8x8 Memory Layout
+//                 00 = Pixel @ Row 0, Column 0
+//                 [ 00, 01, ..., 07, 10, 11, ..., 77]
+//
+// For more information about the algorithm see
+// Section 4.3.2 of JPEG: Still Image Data Comppression Standard.
+//==========================================================================
 void cdct1d(float * block)
 {
     for (unsigned int i = 0; i < 8; i++)
@@ -205,8 +314,17 @@ void cdct1d(float * block)
     }
 }
 
-// Wrapper Function to call both the
-// row and column based 1D-DCTs.
+//==========================================================================
+// This function will call the Row 1D DCT followed by the Column 1D DCT.
+// This will perform a 2D-DCT on the provided block. This function performs
+// the 2D-DCT inplace and will destroy input data.
+//
+// Parameters:
+//     block - A pointer to a 8x8 pixels layed out linearly
+//             8x8 Memory Layout
+//                 00 = Pixel @ Row 0, Column 0
+//                 [ 00, 01, ..., 07, 10, 11, ..., 77]
+//==========================================================================
 void dct2d(float * block)
 {
     // Row 1D-DCT
@@ -216,7 +334,14 @@ void dct2d(float * block)
     cdct1d(block);
 }
 
-
+//==========================================================================
+// This function takes in unsigned char pixel values and shifts them down
+// by 128. This function also converts the input data to float.
+//
+// Parameters:
+//  input  - A pointer to a 8x8 pixels
+//  output - A pointer to a 8x8 pixels
+//==========================================================================
 void zero_shift(unsigned char * input, float * output)
 {
     for (int i = 0; i < 8 * 8; i++)
@@ -225,18 +350,34 @@ void zero_shift(unsigned char * input, float * output)
     }
 }
 
-
-// Divide the 2D-DCT by the specified quantization table
-// We also divide by 4 to take out the 2x scaling in the 1D-DCT
-// We also store the data in the zig-zag order
+//==========================================================================
+// This functio performs the quantization and readout re-ordering. It also
+// divides by 4 to take out the 2x scaling in the 1D-DCT. This function will
+// also convert the DCT floats to shorts.
+//
+// Parameters:
+//  input  - A pointer to a 8x8 pixels
+//  qTable - A pointer to a 8x8 table of quaniztation values
+//  output - A pointer to a 8x8 pixels
+//==========================================================================
 void quant_zigzag(float * input, const unsigned char * qTable, short * output)
 {
     for (int i = 0; i < 8 * 8; i++)
     {
-        output[output_pattern[i]] = ((short)roundf(input[i] / (float)qTable[i])) / 4;
+        output[output_pattern[i]] = ((short)roundf(input[i] / (float)qTable[i])) / 4;;
     }
 }
 
+//==========================================================================
+// This helper function will return the minimum number of bits needed to
+// store the absolute value of the specified value.
+//
+// Parameter:
+//  value - The number to find the minimum number of bits to store
+//
+// Return:
+//  The minimum number of bits to store the specified value
+//==========================================================================
 int num_bits(int value)
 {
     // Check for Zero
@@ -247,19 +388,30 @@ int num_bits(int value)
     value = abs(value);
 
     // Find Min Number of Bits Need to Store This Number
-    for (int i = 1; i < 8; i++)
+    for (int i = 1; i < 16; i++)
     {
         if ((1 << i) > value)
             return i;
     }
 
-    return 8;
+    return 15;
 }
 
-// Scan the 8x8 and convert it to a run length encoded stram of values
+//==========================================================================
+// This function performs the zero-run length encoding on the specified
+// 8x8 block. This function also performs DPCM on the DC component.
+//
+// Parameters:
+//  input   - a pointer to the input 8x8 block (output of quantization)
+//  output  - a pointer to the output buffer
+//  length  - a pointer to the length of the output RLE
+//  prev_dc - a pointer to the previous DC component value. It will be
+//            updated with the current DC component value after the DPCM
+//            was caluclated.
+//==========================================================================
 void zero_rle(short * input, RLEInfo * output, unsigned int * length, short * prev_dc)
 {
-    // Get Diff
+    // Get Diff (DCPM)
     int diff = input[0] - *prev_dc;
 
     // Save Last DC Value
@@ -316,9 +468,17 @@ void zero_rle(short * input, RLEInfo * output, unsigned int * length, short * pr
     *length = idx + 1;
 }
 
+//==========================================================================
 // Take the Run Length Encoding and encode it to a binary file using 
 // the Huffman codes provided in the table.
-void encode(RLEInfo * rle, unsigned int rle_length, HuffInfo * table, FILE * fid)
+//
+// Parameters:
+//  rle        - a pointer to the input buffer of run-length ecoded data
+//  rle_length - the size of the rle data
+//  table      - Huffman Code Table
+//  fid        - output file id
+//==========================================================================
+void encode(RLEInfo * rle, unsigned int rle_length, const HuffInfo * table, FILE * fid)
 {
     EncodeInfo item;
 
@@ -349,12 +509,23 @@ void encode(RLEInfo * rle, unsigned int rle_length, HuffInfo * table, FILE * fid
     }
 }
 
+//==========================================================================
 // Compress an 8x8 Block
-void compress_8x8(unsigned char * block, short * prev_dc, FILE * fid)
+//
+// Parameters:
+//  block   - A pointer to a 8x8 pixels layed out linearly
+//            8x8 Memory Layout
+//               00 = Pixel @ Row 0, Column 0
+//               [ 00, 01, ..., 07, 10, 11, ..., 77]
+//  prev_dc - A pointer to the location of the prev dc value
+//  fid     - The output file id
+//==========================================================================
+void compress_8x8(unsigned char * block, const unsigned char * qTable, const HuffInfo * dc_table, const HuffInfo * ac_table, short * prev_dc, FILE * fid)
 {
     float input[8 * 8];
     short zz[8 * 8];
-    RLEInfo rle[64];
+    short dbg[8 * 8];
+    RLEInfo rle[256];
     unsigned int rle_length;
 
     // Zero-Shift
@@ -364,7 +535,7 @@ void compress_8x8(unsigned char * block, short * prev_dc, FILE * fid)
     dct2d(input);
 
     // Quantization 
-    quant_zigzag(input, yqTable, zz);
+    quant_zigzag(input, qTable, zz);
 
     // Zero Run-Length Encode
     zero_rle(zz, rle, &rle_length, prev_dc);
@@ -376,20 +547,61 @@ void compress_8x8(unsigned char * block, short * prev_dc, FILE * fid)
     encode(&rle[1], rle_length - 1, ac_table, fid);
 }
 
-// Compress A Full Image
-void compress_img(unsigned char * img, unsigned int channels, ChannelInfo * info, FILE * fid)
+//==========================================================================
+// Compress a full image
+//
+// Parameters:
+//  channels - The number of channels in the image
+//  info     - A pointer to an array that stores the channel information
+//  fid      - The output file id
+//==========================================================================
+void compress_img(unsigned int channels, ChannelInfo * info, FILE * fid)
 {
     // Load Huffman Tables
-    load_huffman_table(y_dc_codes_per_len, y_dc_values, dc_table);
-    load_huffman_table(y_ac_codes_per_len, y_ac_values, ac_table);
+    load_huffman_table(y_dc_codes_per_len, y_dc_values, y_dc_table);
+    load_huffman_table(y_ac_codes_per_len, y_ac_values, y_ac_table);
 
-    // Calculate Bounds
-    unsigned int blocks = (info[0].width * info[0].height) / (8 * 8);
-
-    // Break Into Blocks
-    short prev_dc = 0;
-    for (unsigned int i = 0; i < blocks; i++)
+    if (channels > 1)
     {
-        compress_8x8(&img[i*(8 * 8)], &prev_dc, fid);
+        load_huffman_table(c_dc_codes_per_len, c_dc_values, c_dc_table);
+        load_huffman_table(c_ac_codes_per_len, c_ac_values, c_ac_table);
+    }
+
+    // Calcualte number x blocks
+    unsigned int xblocks = info[0].width / 8;
+    unsigned int yblocks = info[0].height / 8;
+
+    // Previous DC Values
+    short y_prev_dc = 0;
+    short cb_prev_dc = 0;
+    short cr_prev_dc = 0;
+    
+    // Process Blocks
+    if (channels == 1)
+    {
+        for (unsigned i = 0; i < xblocks * yblocks; i++)
+        {
+            compress_8x8(&info[0].data[i * 64], yqTable, y_dc_table, y_ac_table, &y_prev_dc, fid);
+        }
+    }
+    else
+    {
+        for (unsigned int row = 0; row < yblocks; row += 2)
+        {
+            for (unsigned int col = 0; col < xblocks; col += 2)
+            {
+                // Process 4 Luminance Blocks
+                compress_8x8(&info[0].data[row       * xblocks       * 64 + col       * 64], yqTable, y_dc_table, y_ac_table, &y_prev_dc, fid);
+                compress_8x8(&info[0].data[row       * xblocks       * 64 + (col + 1) * 64], yqTable, y_dc_table, y_ac_table, &y_prev_dc, fid);
+                compress_8x8(&info[0].data[(row + 1) * xblocks       * 64 + col       * 64], yqTable, y_dc_table, y_ac_table, &y_prev_dc, fid);
+                compress_8x8(&info[0].data[(row + 1) * xblocks       * 64 + (col + 1) * 64], yqTable, y_dc_table, y_ac_table, &y_prev_dc, fid);
+
+                // Process 1 Cb Block
+                compress_8x8(&info[1].data[(row / 2) * (xblocks / 2) * 64 + (col / 2) * 64], cqTable, c_dc_table, c_ac_table, &cb_prev_dc, fid);
+
+                // Process 1 Cr Block
+                compress_8x8(&info[2].data[(row / 2) * (xblocks / 2) * 64 + (col / 2) * 64], cqTable, c_dc_table, c_ac_table, &cr_prev_dc, fid);
+            }
+        }
     }
 }

@@ -1,5 +1,6 @@
 #include "jpeg_file.h"
 #include <stdlib.h>
+#include <math.h>
 
 #define MSB(X) ((X >> 8) & 0xFF)
 #define LSB(X) (X & 0xFF)
@@ -7,44 +8,66 @@
 static unsigned char current_byte = 0;
 static unsigned char current_bit_cnt = 0;
 
-void write_quantization(FILE * fid)
+void write_quantization(FILE * fid, unsigned int channels)
 {
-    unsigned char data[5];
+    unsigned char data[4];
     unsigned char qtable[64];
     const unsigned char * read_ptrn = get_read_pattern();
-    const unsigned char * q = get_yqtable();
+    const unsigned char * yq = get_yqtable();
+    const unsigned char * cq = get_cqtable();
+    unsigned int length = 2 + (64 + 1);
+
+    if (channels > 1)
+        length += (64 + 1);
 
     // Set QTable Marker
     data[0] = 0xFF;
     data[1] = 0xDB;
     
     // Set Header Length
-    data[2] = 0;
-    data[3] = 67;
-    
-    // Table Info
-    data[4] = 0;
-    fwrite(data, 1, 5, fid);
+    data[2] = MSB(length);
+    data[3] = LSB(length);
+    fwrite(data, 1, 4, fid);
 
-    // Write Table
+    // Luminance Table Info
+    data[0] = 0;
+    fwrite(data, 1, 1, fid);
+
+    // Write Luminance Table
     for (int i = 0; i < 64; i++)
     {
-        qtable[read_ptrn[i]] = q[i];
+        qtable[read_ptrn[i]] = yq[i];
     }
     fwrite(qtable, 1, 64, fid);
+
+    if (channels > 1)
+    {
+        // Chrominance Table Info
+        data[0] = 1;
+        fwrite(data, 1, 1, fid);
+
+        // Write Chrominance Table
+        for (int i = 0; i < 64; i++)
+        {
+            qtable[read_ptrn[i]] = cq[i];
+        }
+        fwrite(qtable, 1, 64, fid);
+    }
 }
 
-void write_start_of_frame(FILE * fid, unsigned short width, unsigned short height)
+void write_start_of_frame(FILE * fid, unsigned int width, unsigned int height, ChannelInfo * info, unsigned int channels)
 {
-    unsigned char data[13];
+    unsigned short length = 8 + (3 * channels);
+    unsigned char data[20];
 
     // Start of Frame Marker
     data[0] = 0xFF;
     data[1] = 0xC0;
     
     // Header Length
-    data[2] = 0;
-    data[3] = 11;
+    
+    data[2] = MSB(length);
+    data[3] = LSB(length);
     
     // Sample Precision
     data[4] = 8;
@@ -58,22 +81,45 @@ void write_start_of_frame(FILE * fid, unsigned short width, unsigned short heigh
     data[8] = LSB(width);
     
     // Components in Frame
-    data[9] = 1;
+    data[9] = channels;
     
-    // Component Id
-    data[10] = 1;
-    
-    // Component Samping
-    data[11] = 0x11;
-    
-    // QTable ID
-    data[12] = 0;
+    for (unsigned int i = 0; i < channels; i++)
+    {
+        // Component Id
+        data[i*3 + 10] = (unsigned char)(i + 1);
+
+        // Channel 0
+        if (i == 0)
+        {
+            if (channels == 1)
+            {
+                // Component Samping
+                data[i * 3 + 11] = 0x11;
+            }
+            else
+            {
+                // Component Samping
+                data[i * 3 + 11] = 0x22;
+            }
+
+            // QTable ID
+            data[i * 3 + 12] = 0;
+        }
+        else
+        {
+            // Component Samping
+            data[i * 3 + 11] = 0x11;
+
+            // QTable ID
+            data[i * 3 + 12] = 1;
+        }
+    }
 
     // Write Data
-    fwrite(data, 1, 13, fid);
+    fwrite(data, 1, length+2, fid);
 }
 
-void write_huffman(FILE * fid, unsigned char isDC)
+void write_huffman(FILE * fid, unsigned char id, unsigned int code_cnt, const unsigned char * lengths, const unsigned char * values)
 {
     unsigned char data[5];
     unsigned short len;
@@ -83,52 +129,64 @@ void write_huffman(FILE * fid, unsigned char isDC)
     data[1] = 0xC4;
     
     // Length
-    len = 19 + get_code_count(isDC);
+    len = 2 + 1 + 16 + code_cnt;
     data[2] = MSB(len);
     data[3] = LSB(len);
     
-    // Table Type
-    data[4] = (isDC == 1) ? 0 : 0x10;
+    // ID
+    data[4] = id;
     fwrite(data, 1, 5, fid);
 
-    // Table
-    fwrite(get_code_lens(isDC), 1, 16, fid);
-    fwrite(get_code_values(isDC), 1, get_code_count(isDC), fid);
+    // Write Lengths
+    fwrite(lengths, 1, 16, fid);
+
+    // Write Values
+    fwrite(values, 1, code_cnt, fid);
 }
 
-void write_scan_header(FILE * fid)
+void write_scan_header(FILE * fid, unsigned int channels)
 {
-    unsigned char data[10];
+    unsigned char data[5];
+    unsigned short len = 6 + 2 * channels;
 
     // Scan Header Marker
     data[0] = 0xFF;
     data[1] = 0xDA;
     
     // Header Length
-    data[2] = 0;
-    data[3] = 8;
+    data[2] = MSB(len);
+    data[3] = LSB(len);
     
     // Number of Compoents in Scan
-    data[4] = 1;
-    
-    // Component 1 Selector
-    data[5] = 1;
-    
-    // Component 1 Selector
-    data[6] = 0;
-    
+    data[4] = channels;
+    fwrite(data, 1, 5, fid);
+
+    for (unsigned int i = 0; i < channels; i++)
+    {
+        // Scan Component Selector
+        data[0] = i + 1;
+
+        // Hufman Table
+        if (i == 0)
+            data[1] = 0x00;
+        else
+            data[1] = 0x11;
+
+        fwrite(data, 1, 2, fid);
+    }
+
     // Start of Spectral Selection
-    data[7] = 0;
+    data[0] = 0;
     
     // End of Spectral Selection
-    data[8] = 63;
+    data[1] = 63;
     
     // Approximation Bit Positions
-    data[9] = 0;
-    fwrite(data, 1, 10, fid);
+    data[2] = 0;
+    fwrite(data, 1, 3, fid);
 }
 
-FILE * open_stream(const char * file_name, unsigned int width, unsigned int height)
+FILE * open_stream(const char * file_name, unsigned int width, unsigned int height, ChannelInfo * info, unsigned int channels)
 {
     FILE * fid;
     unsigned char data[2];
@@ -146,20 +204,24 @@ FILE * open_stream(const char * file_name, unsigned int width, unsigned int heig
     data[1] = 0xD8;
     fwrite(&data, 1, 2, fid);
     
-    // Write Quantization Table
-    write_quantization(fid);
+    // Write Quantization Tables
+    write_quantization(fid, channels);
 
     // Write Start Of Frame
-    write_start_of_frame(fid, width, height);
+    write_start_of_frame(fid, width, height, info, channels);
 
-    // Write DC Huffman Table
-    write_huffman(fid, 1);
+    // Write Huffman Tables
+    write_huffman(fid, 0x00, get_code_count(1), get_code_lens(1, 0), get_code_values(1, 0));
+    write_huffman(fid, 0x10, get_code_count(0), get_code_lens(0, 0), get_code_values(0, 0));
 
-    // Write AC Huffman Table
-    write_huffman(fid, 0);
+    if (channels > 1)
+    {
+        write_huffman(fid, 0x01, get_code_count(1), get_code_lens(1, 1), get_code_values(1, 1));
+        write_huffman(fid, 0x11, get_code_count(0), get_code_lens(0, 1), get_code_values(0, 1));
+    }
 
     // Write Scan Header
-    write_scan_header(fid);
+    write_scan_header(fid, channels);
 
     // Return File Pointer
     return fid;
@@ -215,6 +277,14 @@ void write_stream(FILE * fid, const EncodeInfo * item)
         if (current_bit_cnt == 8)
         {
             fwrite(&current_byte, 1, 1, fid);
+            
+            // Check if the byte we currently
+            // outputed was 0xFF and since 
+            // 0xFF is a control code we need to
+            // output a 0x00 in-order to let the
+            // decoder know that it was data not
+            // control, see Annex F - Section F.1.2.3
+            // of ISO DIS 10918-1
             if (current_byte == 0xFF)
             {
                 current_byte = 0;
@@ -277,6 +347,8 @@ void file_read(const char * file_name, unsigned int width, unsigned int height,
     }
 
     // Calculate Bounds
+    unsigned int aWidth = 0;
+    unsigned int aHeight = 0;
     for (unsigned int i = 0; i < channels; i++)
     {
         unsigned int w_div= 8;
@@ -288,8 +360,22 @@ void file_read(const char * file_name, unsigned int width, unsigned int height,
             h_div *= 2;
         }
 
-        info[i].width = ((width + w_div - 1) / w_div) * w_div;
-        info[i].height = ((height + h_div - 1) / h_div) * h_div;
+        aWidth = max(aWidth, ((width + w_div - 1) / w_div) * w_div);
+        aHeight = max(aHeight, ((height + h_div - 1) / h_div) * h_div);
+    }
+
+    // Allocate Memory
+    for (unsigned int i = 0; i < channels; i++)
+    {
+        info[i].width = aWidth;
+        info[i].height = aHeight;
+
+        if (i != 0)
+        {
+            info[i].width /= 2;
+            info[i].height /= 2;
+        }
+
         info[i].data = (unsigned char *)malloc(info[i].width * info[i].height);
     }
 
@@ -365,17 +451,17 @@ void file_read(const char * file_name, unsigned int width, unsigned int height,
                     if ((row % 2) == 0)
                     {
                         unsigned int alt = (row % 4) / 2;
-                        unsigned int clrOffset = (yblock / 2) * info[1].width * 4 + (yblock % 2) * 8 * 4 + (xblock / 2) * 8 * 8 + (xblock % 2) * 4 + row * 4 + i / 2;
+                        unsigned int clrOffset = ((yblock / 2) * info[1].width * 8) + (yblock % 2) * 8 * 4 + (xblock / 2) * 8 * 8 + (xblock % 2) * 4 + row * 4 + i / 2;
                         if (((i + alt) % 2) == 0)
                         {
                             
-                            float cb = 128.0f - 0.168736f * r - 0.331264f * g + 0.5f * b;
+                            float cb = roundf(128.0f - 0.168736f * r - 0.331264f * g + 0.5f * b);
                             info[1].data[clrOffset] = (unsigned char)cb;
                         }
 
                         if (((i + alt + 1) % 2) == 0)
                         {
-                            float cr = 128.0f + 0.5f * r - 0.418688f * g - 0.081312f * b;
+                            float cr = roundf(128.0f + 0.5f * r - 0.418688f * g - 0.081312f * b);
                             info[2].data[clrOffset] = (unsigned char)cr;
                         }
                     }

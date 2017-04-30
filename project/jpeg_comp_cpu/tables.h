@@ -1,7 +1,16 @@
+//==========================================================================
+// This file contains useful constant tables used in the encorder portion
+// of the software.
+//
+// Author: George Rosier (gmrosier@email.arizona.edu)
+// Date: 4/02/2017
+//==========================================================================
 #ifndef TABLES_H
 #define TABLES_H
 
-// Quantization Tables
+// Standard Luminance Quantization Table
+// Specified in Annex K - Table K.1
+// ISO DIS 10918-1
 const unsigned char y_qTable[8 * 8] =
 {
     16, 11, 10, 16,  24,  40,  51,  61,
@@ -14,6 +23,9 @@ const unsigned char y_qTable[8 * 8] =
     72, 92, 95, 98, 112, 100, 103,  99
 };
 
+// Standard Chrominance Quantization Table
+// Specified in Annex K - Table K.2
+// ISO DIS 10918-1
 const unsigned char cr_qTable[8 * 8] = 
 {
     17, 18, 24, 47, 99, 99, 99, 99,
@@ -27,6 +39,9 @@ const unsigned char cr_qTable[8 * 8] =
 };
 
 // Cosine Factors for Rotation
+// JPEG Still Image Data Compression Standard
+// William B. Pennebaker, Joal L. Mitchell
+// Section 4.3.1
 const float angle[7] = {
     0.9808f,
     0.9239f,
@@ -40,7 +55,11 @@ const float angle[7] = {
 #define C(x) (angle[x-1])
 #define S(x) (angle[6-(x-1)])
 
-// Output Pattern Table
+
+// Zig-Zag Sequence
+// Based on Figure A.6
+// Specified in Annex A - Section A.3.6
+// ISO DIS 10918-1
 const unsigned char output_pattern[8 * 8] =
 {
     0,   1,  5,  6, 14, 15, 27, 28,
@@ -68,9 +87,17 @@ typedef struct
     unsigned char length;
 } HuffInfo;
 
+// Standard Luminance DC Entropy Codes
+// Based on Table K.3
+// Specified in Annex K - Section K.3.3.1
+// ISO DIS 10918-1
 const unsigned char y_dc_codes_per_len[16] = { 0,1,5,1,1,1,1,1,1,0,0,0,0,0,0,0 };
 const unsigned char y_dc_values[12] = { 0,1,2,3,4,5,6,7,8,9,10,11 };
 
+// Standard Luminance AC Entropy Codes
+// Based on Table K.5
+// Specified in Annex K - Section K.3.3.2
+// ISO DIS 10918-1
 const unsigned char y_ac_codes_per_len[16] = { 0,2,1,3,3,2,4,3,5,5,4,4,0,0,1,0x7D };
 const unsigned char y_ac_values[162] = {
     0x01,0x02,0x03,0x00,0x04,0x11,0x05,0x12,0x21,0x31,0x41,0x06,0x13,0x51,0x61,0x07,0x22,0x71,0x14,0x32,0x81,0x91,0xa1,0x08,
@@ -82,9 +109,17 @@ const unsigned char y_ac_values[162] = {
     0xe3,0xe4,0xe5,0xe6,0xe7,0xe8,0xe9,0xea,0xf1,0xf2,0xf3,0xf4,0xf5,0xf6,0xf7,0xf8,0xf9,0xfa
 };
 
+// Standard Chrominance DC Entropy Codes
+// Based on Table K.4
+// Specified in Annex K - Section K.3.3.1
+// ISO DIS 10918-1
 const unsigned char c_dc_codes_per_len[16] = { 0, 3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0 };
 const unsigned char c_dc_values[12] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };
 
+// Standard Chrominance AC Entropy Codes
+// Based on Table K.6
+// Specified in Annex K - Section K.3.3.2
+// ISO DIS 10918-1
 const unsigned char c_ac_codes_per_len[16] = { 0, 2, 1, 2, 4, 4, 3, 4, 7, 5, 4, 4, 0, 1, 2, 0x77 };
 const unsigned char c_ac_values[258] = 
 {

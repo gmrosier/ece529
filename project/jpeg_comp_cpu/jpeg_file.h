@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include "encoder.h"
 
-FILE * open_stream(const char * file_name, unsigned int height, unsigned int width);
+FILE * open_stream(const char * file_name, unsigned int width, unsigned int height, ChannelInfo * info, unsigned int channels);
 void close_stream(FILE * fid);
 void write_stream(FILE * fid, const EncodeInfo * item);
 

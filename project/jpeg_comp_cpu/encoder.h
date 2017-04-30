@@ -19,10 +19,10 @@ typedef struct
     unsigned char  add_length;
 } EncodeInfo;
 
-void init_qtable(float quality_factor);
-void compress_img(unsigned char * img, unsigned int channels, ChannelInfo * info, FILE * fid);
-const unsigned char * get_code_lens(unsigned char isDC);
-const unsigned char * get_code_values(unsigned char isDC);
+void init_qtable(unsigned int quality_factor);
+void compress_img(unsigned int channels, ChannelInfo * info, FILE * fid);
+const unsigned char * get_code_lens(unsigned char isDC, unsigned int channel);
+const unsigned char * get_code_values(unsigned char isDC, unsigned int channel);
 const unsigned int get_code_count(unsigned char isDC);
 const unsigned char * get_yqtable();
 const unsigned char * get_cqtable();
