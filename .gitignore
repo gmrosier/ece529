@@ -52,3 +52,5 @@ project/jpeg_comp_cpu/\.vscode/
 
 project/jpeg_comp_cpu/jpeg_encoder
 /project/jpeg_comp_cpu/output.jpg
+
+project/jpeg_comp_cpu/\.vs/jpeg_comp_cpu/v14/\.suo
