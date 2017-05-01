@@ -553,7 +553,6 @@ void compress_8x8(unsigned char * block, const unsigned char * qTable, const Huf
 {
     float input[8 * 8];
     short zz[8 * 8];
-    short dbg[8 * 8];
     RLEInfo rle[256];
     unsigned int rle_length;
 

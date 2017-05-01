@@ -9,7 +9,7 @@
 #define ENCODER_H
 
 #include <stdio.h>
-
+#include <stdlib.h>
 
 //==========================================================================
 // Macros For Min & Max if not defined elsewhere.
